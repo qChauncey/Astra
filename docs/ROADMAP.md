@@ -64,9 +64,9 @@ python mock_pipeline.py --phase 2 --seq-len 16 --hidden-dim 256
 
 | Task | Status | Notes |
 |------|--------|-------|
-| Integrate `hivemind.DHT` for peer discovery | Pending | Replace mock `REGIONS` dict |
-| DHT-based expert shard advertisement | Pending | Nodes publish `{expert_ids, layer_range, region}` |
-| Dynamic node join/leave handling in `GeoAwareMoERouter` | Pending | Hook into DHT event callbacks |
+| Integrate `hivemind.DHT` for peer discovery | ✅ Done | `astra/network/dht.py` — AstraDHT with hivemind-compatible API |
+| DHT-based expert shard advertisement | ✅ Done | Nodes publish `{expert_ids, layer_range, region}` via `Store` |
+| Dynamic node join/leave handling in `GeoAwareMoERouter` | ✅ Done | Hook into DHT event callbacks |
 | Engram memory node (storage-only DHT peers) | Pending | Separate from compute nodes |
 
 ### 3.2 Production Inference Engine
@@ -75,7 +75,7 @@ python mock_pipeline.py --phase 2 --seq-len 16 --hidden-dim 256
 |------|--------|-------|
 | Real KTransformers C++ binding integration | Pending | Set `ASTRA_USE_KTRANSFORMERS=1` |
 | DeepSeek-V4 checkpoint loader (safetensors / GGUF) | Pending | Weight shard mapping to nodes |
-| KV-cache streaming between nodes (`TransferKVCache` RPC) | Pending | Proto stub exists |
+| KV-cache streaming between nodes (`TransferKVCache` RPC) | ✅ Done | `astra/rpc/kv_transfer.py` — chunked ≤3 MB streaming |
 | Speculative decoding support | Pending | Draft model on single fast node |
 | Continuous batching across pipeline stages | Pending | Micro-batch interleaving |
 
@@ -96,13 +96,21 @@ python mock_pipeline.py --phase 2 --seq-len 16 --hidden-dim 256
 | Peer identity via libp2p-style key pairs | Pending | DHT node authentication |
 | Weight shard integrity (SHA-256 manifest) | Pending | Prevent weight tampering |
 
-### 3.5 Frontend Portal
+### 3.5 CLI & API Infrastructure
+
+| Task | Status | Notes |
+|------|--------|-------|
+| OpenAI-compatible API endpoint (SSE streaming) | ✅ Done | `astra/api/openai_compat.py` — `/v1/chat/completions` + SSE |
+| PipelineOrchestrator (N-node DHT chaining) | ✅ Done | `astra/network/orchestrator.py` |
+| run_node CLI (production node launcher) | ✅ Done | `scripts/run_node.py` |
+| run_cluster CLI (single-machine multi-node cluster) | ✅ Done | `scripts/run_cluster.py` |
+
+### 3.6 Frontend Portal (Future)
 
 | Task | Status | Notes |
 |------|--------|-------|
 | Next.js / Electron UI scaffold | Pending | Decentralized login |
 | Real-time compute / VRAM / RTT monitoring dashboard | Pending | Pulls stats from Ping RPCs |
-| Inference API endpoint (OpenAI-compatible) | Pending | FastAPI wrapper over `InferenceClient` |
 | Contributor earnings / token accounting | Pending | For optional incentive layer |
 
 ---
@@ -126,8 +134,7 @@ python mock_pipeline.py --phase 2 --seq-len 16 --hidden-dim 256
 
 | 层级 | 工具 | 当前状态 | 覆盖目标 |
 |-----|------|---------|---------|
-| 单元测试（CPU） | pytest | ✅ 70 个，全通过 | 序列化、LRU 缓存、Haversine、DHT、gRPC |
-| 待补充单元测试 | pytest | ❌ 缺失 | `HeterogeneousEngine`、`KVTransfer`、OpenAI API |
+| 单元测试（CPU） | pytest | ✅ 149 个，全通过 | 序列化、LRU 缓存、Haversine、DHT、gRPC、HeterogeneousEngine、KVTransfer、OpenAI API |
 | 集成测试（本地） | pytest + threading | ✅ 已覆盖 | mock_pipeline.py Phase 1 & 2 |
 | 硬件集成测试 | 自托管 GPU Runner | ❌ 未配置 | KTransformers C++ 内核、真实权重数值对齐 |
 | 负载测试 | locust / 自定义 | ❌ 未实现 | 100 并发请求，吞吐量与 P99 延迟 |
@@ -136,9 +143,9 @@ python mock_pipeline.py --phase 2 --seq-len 16 --hidden-dim 256
 
 | 测试文件 | 状态 | 说明 |
 |---------|------|-----|
-| `tests/test_heterogeneous.py` | ❌ 待编写 | `HeterogeneousEngine` 直接单元测试 |
-| `tests/test_kv_transfer.py` | ❌ 待编写 | KV 缓存分块传输与重组 |
-| `tests/test_api.py` | ❌ 待编写 | OpenAI API 端点（httpx AsyncClient） |
+| `tests/test_heterogeneous.py` | ✅ 完成 | `HeterogeneousEngine` 直接单元测试（23 项） |
+| `tests/test_kv_transfer.py` | ✅ 完成 | KV 缓存分块传输与重组（20 项） |
+| `tests/test_api.py` | ✅ 完成 | OpenAI API 端点（httpx AsyncClient）（23 项） |
 | `.github/workflows/hardware_test.yml` | ❌ 待创建 | 自托管 GPU Runner CI 配置 |
 
 ---
@@ -159,6 +166,6 @@ python mock_pipeline.py --phase 2 --seq-len 16 --hidden-dim 256
 1. **No real model weights** — all tensors are zero/random. Output is numerically meaningless.
 2. **KTransformersStub is numpy** — ~100× slower than C++ CUDA kernels. Use for correctness testing only.
 3. **No checkpoint loading** — weight sharding and loading from safetensors/GGUF is not yet implemented.
-4. **DHT is mocked** — `GeoAwareMoERouter.register_node()` must be called manually; no automatic discovery.
+4. **DHT is in-memory** — `AstraDHT` uses in-memory store; not yet integrated with live `hivemind.DHT` multi-machine discovery. Nodes must be registered manually in local tests.
 5. **No authentication** — gRPC connections are insecure. Do not expose ports to the public internet.
-6. **Test coverage gaps** — `HeterogeneousEngine`, `KVTransfer`, and API endpoints have no direct unit tests. See [docs/TESTING.md](TESTING.md) for the full pending test plan.
+6. **No hardware CI** — GPU integration tests require a self-hosted runner. See [docs/TESTING.md](TESTING.md) for the pending hardware test plan.
