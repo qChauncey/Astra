@@ -156,7 +156,7 @@ class _InferenceServicer(pb2_grpc.InferenceServiceServicer):
         )
 
     # ------------------------------------------------------------------ #
-    # KV cache transfer stub (Phase 3 placeholder)                          #
+    # KV cache transfer (Phase 3)                                           #
     # ------------------------------------------------------------------ #
 
     def TransferKVCache(
@@ -164,8 +164,14 @@ class _InferenceServicer(pb2_grpc.InferenceServiceServicer):
         request_iterator: Iterator[pb2.KVCacheChunk],
         context: grpc.ServicerContext,
     ) -> pb2.PingResponse:
-        chunks = list(request_iterator)
-        log.info("Received %d KV-cache chunks (stub, not applied)", len(chunks))
+        from .kv_transfer import KVCacheReceiver
+        request_id, applied = KVCacheReceiver.receive_and_apply(
+            self._engine, request_iterator
+        )
+        log.info(
+            "TransferKVCache complete: request_id=%s layers_applied=%d",
+            request_id[:8] if request_id else "?", applied,
+        )
         return pb2.PingResponse(node_id=self._node_id, ready=True)
 
 
