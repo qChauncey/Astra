@@ -78,6 +78,13 @@ python scripts/run_node.py --node-id node-A --port 50051 \
 # 5. GPU 模式（需要 CUDA + KTransformers）
 python scripts/run_node.py --node-id node-A --port 50051 \
     --layer-start 0 --layer-end 30 --gpu --api-port 8080
+
+# 6. 单机多节点集群（无需真实 GPU，验证完整 P2P pipeline 基础设施）
+#    在进程内以不同端口启动 N 个节点，通过 gRPC 串联后跑端到端验证
+python scripts/run_cluster.py --nodes 3 --hidden-dim 256 --validate-only
+
+#    保持集群运行 + 开启 OpenAI API 网关，用于手动测试
+python scripts/run_cluster.py --nodes 3 --hidden-dim 256 --api-port 8080
 ```
 
 ---
@@ -334,7 +341,8 @@ astra/
 mock_pipeline.py                # 阶段 1 & 2 本地模拟测试入口
 scripts/
 ├── run_node.py                 # 生产节点启动 CLI
-└── check_env.py                # 环境依赖检查工具
+├── run_cluster.py              # 单机多节点集群启动器（Phase 3 基础设施验证）
+└── check_env.py                # 环境依赖检查工具（含节点角色资格输出）
 tests/                          # 150 个 pytest 测试（全部通过）
 .github/workflows/ci.yml        # CI：Python 3.10/3.11/3.12 矩阵 + lint
 docs/

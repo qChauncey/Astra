@@ -1,0 +1,654 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Astra</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:        #0f1117;
+    --surface:   #1a1d27;
+    --surface2:  #22263a;
+    --border:    #2e3250;
+    --accent:    #5b6af0;
+    --accent2:   #7c8cf8;
+    --text:      #e4e6f1;
+    --text-dim:  #7a7f9a;
+    --green:     #3ecf8e;
+    --yellow:    #f5a623;
+    --red:       #e05c5c;
+    --radius:    10px;
+    --sidebar-w: 280px;
+  }
+
+  html, body { height: 100%; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: var(--bg); color: var(--text); font-size: 14px; }
+
+  /* ── Layout ── */
+  #app { display: flex; height: 100vh; overflow: hidden; }
+
+  /* ── Sidebar ── */
+  #sidebar {
+    width: var(--sidebar-w);
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+  }
+
+  #logo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 18px 16px 14px;
+    border-bottom: 1px solid var(--border);
+  }
+  #logo svg { width: 28px; height: 28px; }
+  #logo-text { font-size: 18px; font-weight: 700; letter-spacing: -0.3px; }
+  #mode-badge {
+    margin-left: auto;
+    font-size: 10px;
+    font-weight: 600;
+    padding: 2px 7px;
+    border-radius: 20px;
+    background: var(--accent);
+    color: #fff;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  #mode-badge.offline { background: var(--yellow); color: #000; }
+
+  /* My node card */
+  #my-node-card {
+    margin: 12px;
+    padding: 12px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+  }
+  #my-node-card .label { font-size: 10px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 6px; }
+  #my-node-name { font-weight: 600; font-size: 13px; margin-bottom: 4px; }
+  #my-node-layers { font-size: 12px; color: var(--text-dim); }
+  .layer-bar { height: 4px; background: var(--border); border-radius: 2px; margin-top: 8px; overflow: hidden; }
+  .layer-fill { height: 100%; background: var(--accent); border-radius: 2px; transition: width 0.4s; }
+
+  /* Peer list */
+  #peer-section {
+    flex: 1;
+    overflow-y: auto;
+    padding: 0 12px 12px;
+  }
+  #peer-section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 0 6px;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--text-dim);
+  }
+  #peer-count { font-size: 11px; }
+
+  .peer-card {
+    padding: 10px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin-bottom: 6px;
+  }
+  .peer-card-top { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
+  .peer-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); flex-shrink: 0; }
+  .peer-dot.slow { background: var(--yellow); }
+  .peer-dot.down { background: var(--red); }
+  .peer-name { font-size: 12px; font-weight: 600; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .peer-latency { font-size: 11px; color: var(--text-dim); }
+  .peer-layers-text { font-size: 11px; color: var(--text-dim); }
+  .peer-card .layer-bar { margin-top: 6px; }
+
+  #no-peers { color: var(--text-dim); font-size: 12px; text-align: center; padding: 20px 0; }
+
+  /* ── Main chat area ── */
+  #main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* Topbar */
+  #topbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 20px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+  }
+  #model-selector {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 5px 10px;
+    border-radius: 6px;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  #status-indicator {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 12px;
+    color: var(--text-dim);
+    margin-left: auto;
+  }
+  #status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); }
+  #status-dot.error { background: var(--red); }
+  #status-dot.loading { background: var(--yellow); animation: pulse 1s infinite; }
+
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+
+  /* Stub warning */
+  #stub-banner {
+    background: rgba(245, 166, 35, 0.1);
+    border-bottom: 1px solid rgba(245, 166, 35, 0.3);
+    padding: 6px 20px;
+    font-size: 12px;
+    color: var(--yellow);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  /* Messages */
+  #messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 24px 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  #welcome {
+    max-width: 560px;
+    margin: auto;
+    text-align: center;
+    padding: 40px 24px;
+  }
+  #welcome h1 { font-size: 28px; font-weight: 700; margin-bottom: 10px; }
+  #welcome p { color: var(--text-dim); line-height: 1.6; margin-bottom: 24px; }
+  .starter-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .starter-btn {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px;
+    text-align: left;
+    color: var(--text);
+    cursor: pointer;
+    font-size: 12px;
+    line-height: 1.4;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  .starter-btn:hover { border-color: var(--accent); background: var(--surface2); }
+  .starter-btn strong { display: block; font-size: 13px; margin-bottom: 2px; }
+
+  .msg-row {
+    display: flex;
+    padding: 6px 24px;
+    gap: 12px;
+    max-width: 860px;
+    width: 100%;
+    margin: 0 auto;
+  }
+  .msg-row.user { flex-direction: row-reverse; }
+
+  .avatar {
+    width: 30px; height: 30px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px; font-weight: 700;
+  }
+  .avatar.user { background: var(--accent); }
+  .avatar.assistant { background: var(--surface2); border: 1px solid var(--border); }
+
+  .bubble {
+    max-width: 72%;
+    padding: 11px 15px;
+    border-radius: 14px;
+    line-height: 1.6;
+    font-size: 14px;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  .bubble.user {
+    background: var(--accent);
+    color: #fff;
+    border-bottom-right-radius: 4px;
+  }
+  .bubble.assistant {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-bottom-left-radius: 4px;
+  }
+
+  .typing-dot {
+    display: inline-block;
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--text-dim);
+    margin: 0 1px;
+    animation: typing 1.2s infinite;
+  }
+  .typing-dot:nth-child(2) { animation-delay: 0.2s; }
+  .typing-dot:nth-child(3) { animation-delay: 0.4s; }
+  @keyframes typing { 0%,80%,100%{transform:translateY(0)} 40%{transform:translateY(-5px)} }
+
+  /* Input bar */
+  #input-area {
+    border-top: 1px solid var(--border);
+    padding: 16px 24px;
+    background: var(--surface);
+  }
+  #input-wrap {
+    max-width: 860px;
+    margin: 0 auto;
+    display: flex;
+    align-items: flex-end;
+    gap: 10px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 10px 12px;
+    transition: border-color 0.15s;
+  }
+  #input-wrap:focus-within { border-color: var(--accent); }
+  #user-input {
+    flex: 1;
+    background: transparent;
+    border: none;
+    outline: none;
+    color: var(--text);
+    font-size: 14px;
+    resize: none;
+    max-height: 180px;
+    line-height: 1.5;
+    font-family: inherit;
+  }
+  #user-input::placeholder { color: var(--text-dim); }
+  #send-btn {
+    width: 34px; height: 34px;
+    border-radius: 8px;
+    background: var(--accent);
+    border: none;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+    transition: background 0.15s;
+  }
+  #send-btn:hover { background: var(--accent2); }
+  #send-btn:disabled { background: var(--border); cursor: not-allowed; }
+  #send-btn svg { width: 16px; height: 16px; fill: #fff; }
+
+  #input-footer {
+    max-width: 860px;
+    margin: 6px auto 0;
+    font-size: 11px;
+    color: var(--text-dim);
+    text-align: center;
+  }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 5px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- ── Sidebar ── -->
+  <aside id="sidebar">
+    <div id="logo">
+      <svg viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="14" cy="14" r="13" stroke="#5b6af0" stroke-width="2"/>
+        <path d="M7 14 L14 7 L21 14 L14 21 Z" fill="#5b6af0" opacity="0.3"/>
+        <circle cx="14" cy="14" r="4" fill="#5b6af0"/>
+      </svg>
+      <span id="logo-text">Astra</span>
+      <span id="mode-badge">P2P</span>
+    </div>
+
+    <div id="my-node-card">
+      <div class="label">This Node</div>
+      <div id="my-node-name">Loading&hellip;</div>
+      <div id="my-node-layers">Layers &mdash;</div>
+      <div class="layer-bar"><div class="layer-fill" id="my-layer-fill" style="width:0%"></div></div>
+    </div>
+
+    <div id="peer-section">
+      <div id="peer-section-header">
+        <span>Network Peers</span>
+        <span id="peer-count">&mdash;</span>
+      </div>
+      <div id="peer-list"><div id="no-peers">No peers discovered yet</div></div>
+    </div>
+  </aside>
+
+  <!-- ── Main ── -->
+  <main id="main">
+    <div id="topbar">
+      <select id="model-selector">
+        <option value="deepseek-v4-flash">DeepSeek-V4-Flash 284B</option>
+      </select>
+      <div id="status-indicator">
+        <div id="status-dot" class="loading"></div>
+        <span id="status-text">Connecting&hellip;</span>
+      </div>
+    </div>
+
+    <div id="stub-banner">
+      &#9888; Inference stub active &mdash; responses are placeholder text (numpy random). Real model requires GPU + weights.
+    </div>
+
+    <div id="messages">
+      <div id="welcome">
+        <h1>Astra</h1>
+        <p>Distributed AI inference &mdash; powered by your collective hardware.<br/>Start a conversation below or pick a prompt.</p>
+        <div class="starter-grid">
+          <button class="starter-btn" onclick="useStarter(this)"><strong>Explain distributed inference</strong>How does Astra split a model across machines?</button>
+          <button class="starter-btn" onclick="useStarter(this)"><strong>Check cluster status</strong>How many nodes are active right now?</button>
+          <button class="starter-btn" onclick="useStarter(this)"><strong>What is DeepSeek-V4-Flash?</strong>Tell me about the model this cluster runs.</button>
+          <button class="starter-btn" onclick="useStarter(this)"><strong>Hello!</strong>Just say hi and introduce yourself.</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="input-area">
+      <div id="input-wrap">
+        <textarea id="user-input" rows="1" placeholder="Message Astra&hellip;" maxlength="4096"></textarea>
+        <button id="send-btn" onclick="sendMessage()" title="Send">
+          <svg viewBox="0 0 16 16"><path d="M1.5 1.5l13 6.5-13 6.5V9.5l9-3-9-3V1.5z"/></svg>
+        </button>
+      </div>
+      <div id="input-footer">Responses generated by the Astra P2P pipeline &middot; <span id="footer-mode">P2P mode</span></div>
+    </div>
+  </main>
+
+</div>
+
+<script>
+// ── State ──────────────────────────────────────────────────────────────────
+var appState = {
+  myNode: null,
+  peers: [],
+  totalLayers: 61,
+  messages: [],
+  streaming: false
+};
+
+// ── Boot ───────────────────────────────────────────────────────────────────
+function boot() {
+  fetchMyNode();
+  fetchPeers();
+  fetchHealth();
+  setInterval(fetchPeers, 5000);
+  setInterval(fetchHealth, 8000);
+  document.getElementById("user-input").addEventListener("keydown", onKey);
+  document.getElementById("user-input").addEventListener("input", autoGrow);
+}
+
+function fetchMyNode() {
+  fetch("/api/my-node")
+    .then(function(r) { return r.ok ? r.json() : null; })
+    .then(function(d) { if (d) { appState.myNode = d; appState.totalLayers = d.total_layers || 61; renderMyNode(d); } })
+    .catch(function() {});
+}
+
+function fetchPeers() {
+  fetch("/api/peers")
+    .then(function(r) { return r.ok ? r.json() : null; })
+    .then(function(d) { if (d) { appState.peers = d.peers || []; renderPeers(appState.peers); } })
+    .catch(function() {});
+}
+
+function fetchHealth() {
+  fetch("/health")
+    .then(function(r) { setStatus(r.ok ? "ok" : "error", r.ok ? "Online" : "API error"); })
+    .catch(function() { setStatus("error", "Unreachable"); });
+}
+
+// ── Render sidebar ─────────────────────────────────────────────────────────
+function renderMyNode(d) {
+  document.getElementById("my-node-name").textContent = d.node_id;
+  document.getElementById("my-node-layers").textContent =
+    "Layers " + d.layer_start + "–" + d.layer_end + " of " + d.total_layers;
+  var pct = Math.round(((d.layer_end - d.layer_start) / d.total_layers) * 100);
+  document.getElementById("my-layer-fill").style.width = pct + "%";
+
+  var badge = document.getElementById("mode-badge");
+  badge.textContent = d.mode === "offline" ? "Offline" : "P2P";
+  badge.className = d.mode === "offline" ? "offline" : "";
+  document.getElementById("footer-mode").textContent =
+    d.mode === "offline" ? "Single-machine mode" : "P2P mode";
+}
+
+function renderPeers(peers) {
+  document.getElementById("peer-count").textContent = peers.length;
+  var list = document.getElementById("peer-list");
+
+  if (peers.length === 0) {
+    list.innerHTML = '<div id="no-peers">No peers discovered yet</div>';
+    setStatus("ok", "Standalone");
+    return;
+  }
+
+  setStatus("ok", peers.length + " peer" + (peers.length !== 1 ? "s" : "") + " online");
+  var html = "";
+  for (var i = 0; i < peers.length; i++) {
+    var p = peers[i];
+    var layers = p.layer_start + "–" + p.layer_end;
+    var pct = Math.round(((p.layer_end - p.layer_start) / appState.totalLayers) * 100);
+    var dotClass = (p._latency_ms != null && p._latency_ms >= 50) ? "slow" : "";
+    var latStr = p._latency_ms != null ? p._latency_ms + "ms" : "—";
+    html += '<div class="peer-card">' +
+      '<div class="peer-card-top">' +
+        '<div class="peer-dot ' + dotClass + '"></div>' +
+        '<span class="peer-name">' + esc(p.node_id) + '</span>' +
+        '<span class="peer-latency">' + latStr + '</span>' +
+      '</div>' +
+      '<div class="peer-layers-text">Layers ' + esc(layers) + ' · ' + esc(p.geo_region || "—") + '</div>' +
+      '<div class="layer-bar"><div class="layer-fill" style="width:' + pct + '%"></div></div>' +
+    '</div>';
+  }
+  list.innerHTML = html;
+}
+
+function setStatus(st, text) {
+  var dot = document.getElementById("status-dot");
+  dot.className = (st === "ok") ? "" : st;
+  document.getElementById("status-text").textContent = text;
+}
+
+// ── Chat ───────────────────────────────────────────────────────────────────
+function useStarter(btn) {
+  var strong = btn.querySelector("strong");
+  document.getElementById("user-input").value = strong ? strong.textContent : btn.textContent;
+  document.getElementById("user-input").focus();
+  autoGrow();
+}
+
+function onKey(e) {
+  if (e.key === "Enter" && !e.shiftKey) {
+    e.preventDefault();
+    sendMessage();
+  }
+}
+
+function sendMessage() {
+  var input = document.getElementById("user-input");
+  var text = input.value.trim();
+  if (!text || appState.streaming) return;
+
+  var welcome = document.getElementById("welcome");
+  if (welcome) welcome.remove();
+
+  input.value = "";
+  autoGrow();
+
+  appendMessage("user", text);
+
+  var typingId = appendTyping();
+  appState.streaming = true;
+  document.getElementById("send-btn").disabled = true;
+
+  var messages = appState.messages.map(function(m) { return { role: m.role, content: m.content }; });
+
+  fetch("/v1/chat/completions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: document.getElementById("model-selector").value,
+      messages: messages,
+      stream: true,
+      max_tokens: 256
+    })
+  })
+  .then(function(r) {
+    removeTyping(typingId);
+    if (!r.ok) {
+      appendMessage("assistant", "[HTTP " + r.status + "] Server error.");
+      finishStream();
+      return;
+    }
+    return readStream(r.body);
+  })
+  .catch(function(e) {
+    removeTyping(typingId);
+    appendMessage("assistant", "[Connection error] " + e.message);
+  })
+  .finally(function() { finishStream(); });
+}
+
+function finishStream() {
+  appState.streaming = false;
+  document.getElementById("send-btn").disabled = false;
+  document.getElementById("user-input").focus();
+}
+
+function readStream(body) {
+  var reader = body.getReader();
+  var decoder = new TextDecoder();
+  var assistantText = "";
+  var msgEl = createBubble("assistant");
+  var buf = "";
+
+  function pump() {
+    return reader.read().then(function(result) {
+      if (result.done) return;
+      buf += decoder.decode(result.value, { stream: true });
+      var lines = buf.split("\n");
+      buf = lines.pop();
+      for (var i = 0; i < lines.length; i++) {
+        var line = lines[i];
+        if (!line.startsWith("data: ")) continue;
+        var data = line.slice(6).trim();
+        if (data === "[DONE]") return;
+        try {
+          var chunk = JSON.parse(data);
+          var delta = (chunk.choices && chunk.choices[0] && chunk.choices[0].delta && chunk.choices[0].delta.content) || "";
+          assistantText += delta;
+          msgEl.textContent = assistantText;
+          scrollToBottom();
+        } catch (e2) {}
+      }
+      return pump();
+    });
+  }
+
+  return pump().then(function() {
+    appState.messages.push({ role: "assistant", content: assistantText });
+  });
+}
+
+// ── Message DOM helpers ────────────────────────────────────────────────────
+function appendMessage(role, text) {
+  appState.messages.push({ role: role, content: text });
+  var row = document.createElement("div");
+  row.className = "msg-row " + role;
+  var avatar = document.createElement("div");
+  avatar.className = "avatar " + role;
+  avatar.textContent = role === "user" ? "U" : "A";
+  var bubble = document.createElement("div");
+  bubble.className = "bubble " + role;
+  bubble.textContent = text;
+  row.appendChild(avatar);
+  row.appendChild(bubble);
+  document.getElementById("messages").appendChild(row);
+  scrollToBottom();
+}
+
+function createBubble(role) {
+  var row = document.createElement("div");
+  row.className = "msg-row " + role;
+  var avatar = document.createElement("div");
+  avatar.className = "avatar " + role;
+  avatar.textContent = "A";
+  var bubble = document.createElement("div");
+  bubble.className = "bubble " + role;
+  row.appendChild(avatar);
+  row.appendChild(bubble);
+  document.getElementById("messages").appendChild(row);
+  scrollToBottom();
+  return bubble;
+}
+
+var _typingCounter = 0;
+function appendTyping() {
+  var id = "typing-" + (++_typingCounter);
+  var row = document.createElement("div");
+  row.className = "msg-row assistant";
+  row.id = id;
+  var avatar = document.createElement("div");
+  avatar.className = "avatar assistant";
+  avatar.textContent = "A";
+  var bubble = document.createElement("div");
+  bubble.className = "bubble assistant";
+  bubble.innerHTML = '<span class="typing-dot"></span><span class="typing-dot"></span><span class="typing-dot"></span>';
+  row.appendChild(avatar);
+  row.appendChild(bubble);
+  document.getElementById("messages").appendChild(row);
+  scrollToBottom();
+  return id;
+}
+
+function removeTyping(id) {
+  var el = document.getElementById(id);
+  if (el) el.remove();
+}
+
+// ── Utilities ──────────────────────────────────────────────────────────────
+function scrollToBottom() {
+  var msgs = document.getElementById("messages");
+  msgs.scrollTop = msgs.scrollHeight;
+}
+
+function autoGrow() {
+  var ta = document.getElementById("user-input");
+  ta.style.height = "auto";
+  ta.style.height = Math.min(ta.scrollHeight, 180) + "px";
+}
+
+function esc(s) {
+  return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+// ── Init ───────────────────────────────────────────────────────────────────
+boot();
+</script>
+</body>
+</html>

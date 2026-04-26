@@ -78,6 +78,13 @@ python scripts/run_node.py --node-id node-A --port 50051 \
 # 5. GPU mode (requires CUDA + KTransformers)
 python scripts/run_node.py --node-id node-A --port 50051 \
     --layer-start 0 --layer-end 30 --gpu --api-port 8080
+
+# 6. Single-machine multi-node cluster (validates full P2P pipeline without real GPU)
+#    Spawns N nodes in-process on separate ports, chains them via gRPC, runs end-to-end
+python scripts/run_cluster.py --nodes 3 --hidden-dim 256 --validate-only
+
+#    Keep cluster running + OpenAI API gateway for manual testing
+python scripts/run_cluster.py --nodes 3 --hidden-dim 256 --api-port 8080
 ```
 
 ---
@@ -316,7 +323,8 @@ astra/
 mock_pipeline.py                # Phase 1 & 2 local simulation harness
 scripts/
 ├── run_node.py                 # Production node launch CLI
-└── check_env.py                # Environment readiness checker
+├── run_cluster.py              # Single-machine multi-node cluster launcher (Phase 3 validation)
+└── check_env.py                # Environment readiness checker (prints node role eligibility)
 tests/                          # 150 pytest tests (all passing)
 .github/workflows/ci.yml        # CI: Python 3.10/3.11/3.12 matrix + lint
 docs/
