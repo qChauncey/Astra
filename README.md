@@ -25,17 +25,39 @@
 
 | Component | Linux | macOS | Windows |
 |-----------|:-----:|:-----:|:-------:|
-| numpy stub (no GPU) | ✅ | ✅ | ✅ |
-| gRPC pipeline | ✅ | ✅ | ✅ |
-| OpenAI API gateway | ✅ | ✅ | ✅ |
-| `check_env.py` | ✅ | ✅ | ✅ |
-| KTransformers C++ kernel | ✅ | ⚠️ build from source | ❌ |
+| Development & testing | ✅ | ✅ | ✅ |
+| API Gateway node | ✅ | ✅ | ✅ |
+| DHT discovery node | ✅ | ✅ | ✅ |
+| **Inference node** (real compute) | ✅ CUDA | ❌ | ⚠️ WSL2 + CUDA |
+| KTransformers C++ kernel | ✅ Native | ❌ | ⚠️ WSL2 |
 
-> **KTransformers** (Phase 4, optional) requires Linux + CUDA. The numpy stub mode runs on all platforms without a GPU.
+### What each hardware config can do
+
+| Config | Inference compute | API Gateway | DHT node | Dev / test |
+|--------|:-----------------:|:-----------:|:--------:|:----------:|
+| Linux + NVIDIA GPU | ✅ | ✅ | ✅ | ✅ |
+| Linux CPU-only | ❌ | ✅ | ✅ | ✅ |
+| macOS (any) | ❌ | ✅ | ✅ | ✅ |
+| Windows + GPU (WSL2) | ✅ | ✅ | ✅ | ✅ |
+| Windows no GPU (native) | ❌ | ✅ | ✅ | ✅ |
+
+> **No GPU = no inference contribution.** The numpy stub produces random outputs — it is only for development and testing, not for joining a real inference cluster.  
+> To contribute actual compute on Windows, use [WSL2 + CUDA](#windows--gpu-inference-via-wsl2).  
+> Without a GPU you can still run an **API Gateway** (handles user HTTP requests, routes to GPU peers) or a **DHT node** (peer discovery only).
 
 ---
 
 ## Quick Start
+
+Jump to your platform:
+- [Linux](#linux)
+- [macOS](#macos)
+- [Windows — no GPU (native)](#windows--no-gpu-native)
+- [Windows — GPU inference via WSL2](#windows--gpu-inference-via-wsl2)
+
+---
+
+### Linux
 
 ```bash
 # 1. Clone and install
@@ -48,11 +70,132 @@ python scripts/check_env.py
 # 3. Run the mock pipeline (no GPU required)
 python mock_pipeline.py --seq-len 32 --hidden-dim 256
 
-# 4. Start a node (with OpenAI-compatible API on port 8080)
-#    --hidden-dim 256  uses mock dimensions; omit for the real model (7168)
+# 4. Start a node (OpenAI-compatible API on port 8080)
+#    --hidden-dim 256 uses mock dimensions; omit for the real model (7168)
 python scripts/run_node.py --node-id node-A --port 50051 \
     --layer-start 0 --layer-end 30 --hidden-dim 256 --api-port 8080
+
+# 5. GPU mode (requires CUDA + KTransformers)
+python scripts/run_node.py --node-id node-A --port 50051 \
+    --layer-start 0 --layer-end 30 --gpu --api-port 8080
 ```
+
+---
+
+### macOS
+
+KTransformers C++ kernels require CUDA and are unavailable on macOS. Mac nodes **cannot contribute inference compute** to the cluster. Valid roles: API Gateway, DHT discovery node, development.
+
+```bash
+# Install Homebrew if needed (https://brew.sh)
+brew install python@3.11 git
+
+git clone https://github.com/qchauncey/astra.git && cd astra
+pip3 install -e ".[proto]"
+
+# Environment check and local testing
+python scripts/check_env.py
+python mock_pipeline.py --seq-len 32 --hidden-dim 256
+
+# Role 1: API Gateway — receives user requests, routes to GPU peers
+python scripts/run_node.py --node-id gateway --port 50051 --api-port 8080
+
+# Role 2: DHT discovery node only (no API, no inference)
+python scripts/run_node.py --node-id dht-node --port 50051
+```
+
+> **Apple Silicon note:** MPS (Metal Performance Shaders) backend is not yet integrated. Full GPU inference on Mac requires a future MPS adapter. Contributions welcome.
+
+---
+
+### Windows — No GPU (native)
+
+Without a GPU, a Windows node **cannot contribute inference compute**. Valid roles: API Gateway, DHT discovery node, development and testing.  
+To contribute real compute, use [WSL2 + CUDA](#windows--gpu-inference-via-wsl2).
+
+```powershell
+# Install Python 3.10+ from https://python.org (check "Add to PATH")
+# Install Git from https://git-scm.com
+
+git clone https://github.com/qchauncey/astra.git
+cd astra
+pip install -e ".[proto]"
+
+# Environment check and local testing
+python scripts/check_env.py
+python mock_pipeline.py --seq-len 32 --hidden-dim 256
+
+# Role 1: API Gateway — receives user HTTP requests, routes to GPU peers in the cluster
+python scripts/run_node.py --node-id gateway --port 50051 --api-port 8080
+
+# Role 2: DHT discovery node only (peer discovery, no inference)
+python scripts/run_node.py --node-id dht-node --port 50051
+```
+
+---
+
+### Windows — GPU Inference via WSL2
+
+KTransformers requires Linux + CUDA. On Windows, WSL2 provides a full Linux kernel with GPU passthrough — Astra runs identically to native Linux inside it.
+
+**Prerequisites**
+- Windows 10 version 21H2 or later / Windows 11
+- NVIDIA GPU with driver ≥ 535 (verify in PowerShell: `nvidia-smi`)
+
+**Step 1 — Enable WSL2** *(PowerShell as Administrator)*
+
+```powershell
+wsl --install -d Ubuntu-22.04
+# Restart Windows when prompted, then open "Ubuntu 22.04" from the Start menu
+```
+
+**Step 2 — Install the NVIDIA WSL2 CUDA driver** *(on Windows host, not inside WSL)*
+
+1. Download the WSL2-compatible display driver from: https://developer.nvidia.com/cuda/wsl  
+2. Install it on **Windows** as a normal driver update.  
+3. Do **not** install the CUDA Toolkit on Windows — it lives inside WSL2 only.
+
+**Step 3 — Install CUDA Toolkit inside WSL2 Ubuntu**
+
+```bash
+# Run these inside the WSL2 Ubuntu terminal
+wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-keyring_1.1-1_all.deb
+sudo dpkg -i cuda-keyring_1.1-1_all.deb
+sudo apt-get update
+sudo apt-get install -y cuda-toolkit-12-4 build-essential python3-pip git
+
+# Verify the GPU is visible
+nvidia-smi
+```
+
+Expected output: your GPU name, driver version, and CUDA version.
+
+**Step 4 — Clone and run Astra inside WSL2**
+
+```bash
+git clone https://github.com/qchauncey/astra.git && cd astra
+pip3 install -e ".[proto]"
+
+# Environment check
+python scripts/check_env.py
+
+# Mock pipeline (CPU-only, sanity check)
+python mock_pipeline.py --seq-len 32 --hidden-dim 256
+
+# Start a node with GPU enabled
+python scripts/run_node.py --node-id node-A --port 50051 \
+    --layer-start 0 --layer-end 30 --gpu --api-port 8080
+```
+
+**WSL2 tips**
+
+| Topic | Detail |
+|-------|--------|
+| Accessing Windows files | Available at `/mnt/c/`, `/mnt/d/`, etc. inside WSL2 |
+| Network | WSL2 ports are accessible from Windows at `localhost:<port>` — no extra config |
+| GPU driver | Shared from Windows host; do **not** install a GPU driver inside WSL2 |
+| Multi-machine | Each Windows machine runs its own WSL2; gRPC pipeline works identically to Linux |
+| Performance | ~3–5% overhead vs bare-metal Linux; negligible for memory-bound MoE workloads |
 
 ---
 
