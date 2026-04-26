@@ -29,9 +29,36 @@
 | gRPC 流水线 | ✅ | ✅ | ✅ |
 | OpenAI API 网关 | ✅ | ✅ | ✅ |
 | `check_env.py` 环境检测 | ✅ | ✅ | ✅ |
-| KTransformers C++ 内核 | ✅ | ⚠️ 需自行编译 | ❌ |
+| KTransformers C++ 内核 | ✅ | ⚠️ 需自行编译 | ⚠️ WSL2 + CUDA |
 
-> **KTransformers**（Phase 4，可选）依赖 Linux + CUDA。numpy stub 模式无需 GPU，三平台均可运行。
+> **Windows GPU 推理**通过 **WSL2**（Windows Subsystem for Linux 2）支持。
+> NVIDIA 的 WSL2 CUDA 驱动可将 GPU 透传到 Linux 环境，KTransformers 在 WSL2 内的运行与原生 Linux 完全一致。
+>
+> numpy stub 模式（无 GPU）可在 Windows 原生环境直接运行，无需 WSL2。
+
+### Windows WSL2 配置指南
+
+```powershell
+# 1. 安装 WSL2（以管理员身份运行 PowerShell）
+wsl --install -d Ubuntu-22.04
+
+# 2. 在 Windows 宿主机安装 NVIDIA WSL2 CUDA 驱动（不是在 WSL 内）
+#    下载地址：https://developer.nvidia.com/cuda/wsl
+#    注意：宿主机只需安装驱动，不要在 Windows 上安装 CUDA Toolkit。
+
+# 3. 进入 WSL2 Ubuntu 终端，安装 CUDA Toolkit 和编译工具
+wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-keyring_1.1-1_all.deb
+sudo dpkg -i cuda-keyring_1.1-1_all.deb
+sudo apt-get update && sudo apt-get install -y cuda-toolkit-12-4 build-essential
+
+# 4. 在 WSL2 内克隆并安装 Astra
+git clone https://github.com/qchauncey/astra.git && cd astra
+pip install -e ".[proto]"
+
+# 5. 验证 GPU 可见
+nvidia-smi
+python scripts/check_env.py
+```
 
 ---
 

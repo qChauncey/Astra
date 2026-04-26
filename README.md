@@ -29,9 +29,38 @@
 | gRPC pipeline | ✅ | ✅ | ✅ |
 | OpenAI API gateway | ✅ | ✅ | ✅ |
 | `check_env.py` | ✅ | ✅ | ✅ |
-| KTransformers C++ kernel | ✅ | ⚠️ build from source | ❌ |
+| KTransformers C++ kernel | ✅ | ⚠️ build from source | ⚠️ WSL2 + CUDA |
 
-> **KTransformers** (Phase 4, optional) requires Linux + CUDA. The numpy stub mode runs on all platforms without a GPU.
+> **Windows GPU inference** is supported via **WSL2** (Windows Subsystem for Linux 2).
+> NVIDIA's WSL2 CUDA driver exposes the GPU inside the Linux environment, so KTransformers runs
+> identically to native Linux. See the [WSL2 setup guide](#windows-wsl2-setup) below.
+>
+> The numpy stub mode (no GPU) runs natively on Windows without WSL2.
+
+### Windows WSL2 Setup
+
+```powershell
+# 1. Install WSL2 (PowerShell as Administrator)
+wsl --install -d Ubuntu-22.04
+
+# 2. Install NVIDIA CUDA driver for WSL2 (on Windows host, not inside WSL)
+#    Download: https://developer.nvidia.com/cuda/wsl
+#    Only the driver is needed on the host — do NOT install the CUDA toolkit on Windows.
+
+# 3. Inside WSL2 Ubuntu terminal:
+#    Install CUDA toolkit + build tools
+wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-keyring_1.1-1_all.deb
+sudo dpkg -i cuda-keyring_1.1-1_all.deb
+sudo apt-get update && sudo apt-get install -y cuda-toolkit-12-4 build-essential
+
+# 4. Clone Astra and install (inside WSL2)
+git clone https://github.com/qchauncey/astra.git && cd astra
+pip install -e ".[proto]"
+
+# 5. Verify GPU is visible
+nvidia-smi
+python scripts/check_env.py
+```
 
 ---
 
