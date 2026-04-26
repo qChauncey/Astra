@@ -6,8 +6,9 @@
 </div>
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
-[![Python](https://img.shields.io/badge/python-3.9%2B-blue)](https://www.python.org)
+[![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org)
 [![Tests](https://img.shields.io/badge/tests-130%20passed-brightgreen)]()
+[![CI](https://github.com/qchauncey/astra/actions/workflows/ci.yml/badge.svg)](.github/workflows/ci.yml)
 [![Status](https://img.shields.io/badge/状态-Phase%203%20进行中-yellow)]()
 
 **Astra** 是一个开源 P2P 分布式推理框架，能够将 **DeepSeek-V4-Flash（284B 参数）** 运行在由普通 PC 组成的集群上（例如配备 RTX 5070 Ti、16 GB 显存的设备）。其核心技术融合自：
@@ -34,8 +35,9 @@ python scripts/check_env.py
 python mock_pipeline.py --seq-len 32 --hidden-dim 256
 
 # 4. 启动一个节点（同时开启 OpenAI 兼容 API，端口 8080）
+#    --hidden-dim 256 使用 mock 维度；真实模型省略此参数（默认 7168）
 python scripts/run_node.py --node-id node-A --port 50051 \
-    --layer-start 0 --layer-end 30 --api-port 8080
+    --layer-start 0 --layer-end 30 --hidden-dim 256 --api-port 8080
 ```
 
 ---
@@ -176,7 +178,8 @@ mock_pipeline.py                # 阶段 1 & 2 本地模拟测试入口
 scripts/
 ├── run_node.py                 # 生产节点启动 CLI
 └── check_env.py                # 环境依赖检查工具
-tests/                          # 70 个 pytest 测试（全部通过）
+tests/                          # 130 个 pytest 测试（全部通过）
+.github/workflows/ci.yml        # CI：Python 3.10/3.11/3.12 矩阵 + lint
 docs/
 ├── ARCHITECTURE.md             # 详细系统设计与传输格式规范
 └── ROADMAP.md                  # 分阶段实施路线图
@@ -206,7 +209,7 @@ docs/
 |-----|-----|
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 系统设计、数据流、传输格式规范 |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | 分阶段实施计划 |
-| [docs/TESTING.md](docs/TESTING.md) | 测试方案：已覆盖 70 项 + 待完成测试清单（含不可自动化的硬件测试项） |
+| [docs/TESTING.md](docs/TESTING.md) | 测试方案：已覆盖 130 项 + 待完成测试清单（含不可自动化的硬件测试项） |
 | [docs/SECURITY.md](docs/SECURITY.md) | 节点间加密（mTLS）、隐藏状态隐私保护、输出完整性验证、差分隐私 |
 | [docs/FEASIBILITY.md](docs/FEASIBILITY.md) | 算力门槛、地理微集群划分规则、带宽需求、与同类项目对比 |
 | [docs/COMPLIANCE.md](docs/COMPLIANCE.md) | 所有依赖库的许可证合规分析、DeepSeek 模型使用条款、专利条款 |
