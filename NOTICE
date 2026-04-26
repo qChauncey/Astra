@@ -1,0 +1,50 @@
+Project Astra
+Copyright 2025 Project Astra Contributors
+
+This product includes software developed by the Astra project
+(https://github.com/qchauncey/astra).
+
+================================================================================
+Third-Party Notices
+================================================================================
+
+This project is built upon and incorporates ideas from the following open-source
+projects. Their licenses and copyright notices are reproduced below as required.
+
+--------------------------------------------------------------------------------
+Petals (https://github.com/bigscience-workshop/petals)
+--------------------------------------------------------------------------------
+Copyright 2022 the Petals authors
+
+Licensed under the Apache License, Version 2.0 (the "License").
+Portions of the P2P routing, DHT-based node discovery, and pipeline-parallel
+block serving architecture are inspired by and adapted from the Petals project.
+
+MODIFICATIONS: The MoE micro-routing layer has been completely rewritten to
+support token-level geographic-aware dispatch for DeepSeek-V4 architecture.
+The inference server has been rewritten to integrate KTransformers heterogeneous
+compute bindings.
+
+--------------------------------------------------------------------------------
+KTransformers (https://github.com/kvcache-ai/ktransformers)
+--------------------------------------------------------------------------------
+Copyright 2024 the KTransformers authors
+
+Licensed under the Apache License, Version 2.0 (the "License").
+The heterogeneous compute engine design (GPU for Attention / CPU-RAM for MoE
+expert weights) is inspired by the KTransformers project.
+
+MODIFICATIONS: Python-level bindings and the shared-expert-pinning cache
+strategy are adapted and reimplemented for integration with the Astra P2P
+pipeline.
+
+--------------------------------------------------------------------------------
+hivemind (https://github.com/learning-at-home/hivemind)
+--------------------------------------------------------------------------------
+Copyright 2020 the hivemind authors
+
+Licensed under the MIT License.
+The DHT-based peer discovery and key-value storage concepts used in Astra's
+network discovery layer are inspired by the hivemind library.
+
+================================================================================

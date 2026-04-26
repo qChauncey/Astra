@@ -1,0 +1,46 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "astra"
+version = "0.1.0-alpha"
+description = "Distributed P2P inference framework for DeepSeek-V4 on commodity hardware"
+readme = "README.md"
+license = { text = "Apache-2.0" }
+requires-python = ">=3.9"
+authors = [{ name = "Project Astra Contributors" }]
+keywords = ["LLM", "distributed-inference", "DeepSeek", "MoE", "P2P", "KTransformers"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = [
+    "numpy>=1.24.0",
+    "grpcio>=1.60.0",
+    "protobuf>=4.25.0",
+    "fastapi>=0.110.0",
+    "uvicorn[standard]>=0.27.0",
+    "httpx>=0.26.0",
+]
+
+[project.optional-dependencies]
+gpu = ["torch>=2.2.0"]
+dev = ["pytest>=8.0.0", "pytest-asyncio>=0.23.0", "black>=24.0.0", "ruff>=0.3.0", "mypy>=1.9.0"]
+proto = ["grpcio-tools>=1.60.0"]
+
+[project.scripts]
+astra-check-env = "astra.scripts.check_env:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["astra*"]
+
+[tool.setuptools.package-data]
+"astra.rpc.proto" = ["*.proto"]
+"astra.rpc.generated" = ["*.py"]
