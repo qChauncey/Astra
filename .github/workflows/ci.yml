@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  push:
+    branches: ["main", "claude/**"]
+  pull_request:
+    branches: ["main"]
+
+jobs:
+  test:
+    name: "Test (Python ${{ matrix.python-version }})"
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install package and CPU-only dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -e ".[proto]"
+          pip install pytest pytest-cov httpx starlette
+
+      - name: Run test suite
+        run: |
+          python -m pytest tests/ -v --tb=short --cov=astra --cov-report=term-missing
+
+      - name: Smoke-test mock pipeline Phase 1
+        run: python mock_pipeline.py --phase 1 --seq-len 16 --hidden-dim 256
+
+      - name: Smoke-test mock pipeline Phase 2
+        run: python mock_pipeline.py --phase 2 --seq-len 8 --hidden-dim 256
+
+  lint:
+    name: "Lint"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install linters
+        run: pip install ruff
+
+      - name: Run ruff
+        run: ruff check astra/ scripts/ --select=E,F,W --ignore=E501

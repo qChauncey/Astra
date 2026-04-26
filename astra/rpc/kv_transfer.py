@@ -128,7 +128,7 @@ class KVCacheSender:
         Returns True if the transfer completed successfully.
         """
         if layer_indices is None:
-            layer_indices = list(engine._kv_cache.keys())
+            layer_indices = list(engine.kv_cache.keys())
 
         if not layer_indices:
             log.debug("KVCacheSender.push: no layers to transfer")
@@ -136,7 +136,7 @@ class KVCacheSender:
 
         def _chunk_iter() -> Iterator[pb2.KVCacheChunk]:
             for layer_idx in layer_indices:
-                cache: LayerKVCache = engine._kv_cache.get(layer_idx)  # type: ignore[attr-defined]
+                cache: LayerKVCache = engine.kv_cache.get(layer_idx)  # type: ignore[attr-defined]
                 if cache is None or cache.k is None:
                     continue
 
@@ -257,7 +257,7 @@ class KVCacheReceiver:
                         v_arr = v_arr.reshape(v_shapes[li])
 
                 if k_arr is not None or v_arr is not None:
-                    cache = engine._kv_cache.setdefault(li, LayerKVCache())
+                    cache = engine.kv_cache.setdefault(li, LayerKVCache())
                     if k_arr is not None:
                         cache.k = k_arr
                     if v_arr is not None:

@@ -7,7 +7,7 @@
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.9%2B-blue)](https://www.python.org)
-[![Tests](https://img.shields.io/badge/tests-70%20passed-brightgreen)]()
+[![Tests](https://img.shields.io/badge/tests-130%20passed-brightgreen)]()
 [![Status](https://img.shields.io/badge/状态-Phase%203%20进行中-yellow)]()
 
 **Astra** 是一个开源 P2P 分布式推理框架，能够将 **DeepSeek-V4-Flash（284B 参数）** 运行在由普通 PC 组成的集群上（例如配备 RTX 5070 Ti、16 GB 显存的设备）。其核心技术融合自：

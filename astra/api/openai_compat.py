@@ -47,6 +47,7 @@ from __future__ import annotations
 import os
 import time
 import uuid
+import zlib
 from typing import AsyncGenerator, List, Literal, Optional, Union
 
 import numpy as np
@@ -130,7 +131,7 @@ def _tokenize(text: str) -> List[int]:
     Production: replace with DeepSeek-V4 tokenizer (tiktoken / transformers).
     """
     words = text.split()
-    return [hash(w) & 0x7FFF for w in words] or [1]
+    return [zlib.crc32(w.encode()) & 0x7FFF for w in words] or [1]
 
 
 def _detokenize(token_ids: List[int]) -> str:
@@ -256,15 +257,11 @@ def create_app(
         return orch.topology()
 
     @app.get("/health")
-    async def health():
-        peers = raw_app_dht(app).get_all_peers()
+    async def health(raw: Request):
+        peers = raw.app.state.dht.get_all_peers()
         return {"status": "ok", "peers": len(peers)}
 
     return app
-
-
-def raw_app_dht(app: FastAPI) -> AstraDHT:
-    return app.state.dht
 
 
 # ─────────────────────────────────────────────────────────────────────────── #

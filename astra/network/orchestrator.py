@@ -168,7 +168,9 @@ class PipelineOrchestrator:
         # Sort segments by layer_start
         ordered_segments = sorted(segments.items(), key=lambda x: x[0][0])
 
-        # Verify contiguous coverage
+        # Verify contiguous coverage and deduplicate overlapping segments.
+        # A segment is skipped if it is fully covered by an earlier segment.
+        # A partially-overlapping segment is included but logged as a warning.
         cursor = 0
         for (ls, le), _ in ordered_segments:
             if ls > cursor:
@@ -181,9 +183,21 @@ class PipelineOrchestrator:
                 f"Pipeline coverage incomplete: layers {cursor}–{self._cfg.num_layers} uncovered"
             )
 
-        # For each segment sort peers nearest-first
+        # For each segment sort peers nearest-first; skip fully-covered segments
         pipeline: List[List[DHTNodeRecord]] = []
+        coverage = 0
         for (ls, le), group in ordered_segments:
+            if le <= coverage:
+                log.debug(
+                    "Skipping fully-overlapping segment %d:%d (already covered to %d)",
+                    ls, le, coverage,
+                )
+                continue
+            if ls < coverage:
+                log.warning(
+                    "Partially-overlapping segment %d:%d (covered to %d) — layers %d:%d will be computed twice",
+                    ls, le, coverage, ls, coverage,
+                )
             sorted_group = sorted(
                 group,
                 key=lambda p: self._local_region.rtt_ms(
@@ -191,6 +205,7 @@ class PipelineOrchestrator:
                 ),
             )
             pipeline.append(sorted_group)
+            coverage = max(coverage, le)
         return pipeline
 
     # ------------------------------------------------------------------ #

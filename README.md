@@ -7,7 +7,7 @@
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.9%2B-blue)](https://www.python.org)
-[![Tests](https://img.shields.io/badge/tests-70%20passed-brightgreen)]()
+[![Tests](https://img.shields.io/badge/tests-130%20passed-brightgreen)]()
 [![Status](https://img.shields.io/badge/status-Phase%203%20in%20progress-yellow)]()
 
 **Astra** is an open-source P2P distributed inference framework that runs **DeepSeek-V4-Flash (284B)** across a cluster of commodity PCs (e.g., RTX 5070 Ti, 16 GB VRAM each) by combining:
