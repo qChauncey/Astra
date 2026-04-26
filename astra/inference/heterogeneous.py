@@ -47,7 +47,7 @@ from __future__ import annotations
 
 import os
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Dict, List, Optional
 
 import numpy as np
@@ -127,7 +127,7 @@ class KTransformersStub:
         theta: float = 10000.0,
     ) -> np.ndarray:
         """Rotary positional embedding (RoPE)."""
-        seq_len, dim = x.shape[-2], x.shape[-1]
+        _, dim = x.shape[-2], x.shape[-1]
         half_dim = dim // 2
         freqs = 1.0 / (theta ** (np.arange(0, half_dim, dtype=np.float32) / half_dim))
         pos = position_ids.astype(np.float32)
@@ -239,8 +239,6 @@ class HeterogeneousEngine:
         self._backend = _kt_backend
 
         # Mock weight matrices (production: load from checkpoint)
-        rng = np.random.default_rng(seed=42)
-        scale = 0.02
         self._attn_q_proj: Dict[int, np.ndarray] = {}
         self._attn_k_proj: Dict[int, np.ndarray] = {}
         self._attn_v_proj: Dict[int, np.ndarray] = {}

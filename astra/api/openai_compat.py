@@ -44,6 +44,7 @@ Run::
 
 from __future__ import annotations
 
+import asyncio
 import os
 import time
 import uuid
@@ -51,13 +52,12 @@ import zlib
 from typing import AsyncGenerator, List, Literal, Optional, Union
 
 import numpy as np
-from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi import FastAPI, Request
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
-from ..network.dht import AstraDHT, DHTNodeRecord
+from ..network.dht import AstraDHT
 from ..network.orchestrator import PipelineConfig, PipelineOrchestrator
-from ..serialization.tensor_pack import DEEPSEEK_V4_HIDDEN_DIM, DEEPSEEK_V4_NUM_LAYERS
 
 
 # ─────────────────────────────────────────────────────────────────────────── #
@@ -208,7 +208,7 @@ def create_app(
         generated_ids: List[int] = []
         pipeline_error: Optional[str] = None
         try:
-            result = orchestrator.run(token_ids, use_kv_cache=True)
+            orchestrator.run(token_ids, use_kv_cache=True)
             # In a real system: sample from logits.  Here: produce dummy tokens.
             n_out = min(req.max_tokens or 32, 32)
             rng = np.random.default_rng(seed=int(time.time()))
@@ -267,9 +267,6 @@ def create_app(
 # ─────────────────────────────────────────────────────────────────────────── #
 # Streaming helper                                                              #
 # ─────────────────────────────────────────────────────────────────────────── #
-
-import asyncio
-import json
 
 
 async def _stream_response(

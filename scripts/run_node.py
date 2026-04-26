@@ -61,7 +61,6 @@ from typing import List, Optional
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from astra.inference.heterogeneous import DeviceMap
-from astra.inference.shared_expert_cache import ExpertWeights
 from astra.network.dht import AstraDHT, DHTNodeRecord
 from astra.rpc.server import InferenceServer
 

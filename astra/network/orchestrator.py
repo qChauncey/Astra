@@ -41,7 +41,6 @@ import time
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
 
-import numpy as np
 
 from ..routing.geo_router import GeoAwareMoERouter, GeoRegion, REGIONS
 from ..rpc.client import InferenceClient

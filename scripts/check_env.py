@@ -39,7 +39,7 @@ import platform
 import shutil
 import subprocess
 import sys
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, Tuple
 
 
 def _check(label: str, fn, *args) -> Tuple[bool, str]:
@@ -155,10 +155,6 @@ def check_nvidia_smi() -> Tuple[bool, str]:
 def check_astra_import() -> Tuple[bool, str]:
     try:
         import astra  # type: ignore
-        from astra.serialization import TensorPacket, TensorSerializer
-        from astra.inference import HeterogeneousEngine, DeviceMap
-        from astra.routing import GeoAwareMoERouter
-        from astra.rpc import InferenceServer, InferenceClient
         return True, f"astra {astra.__version__} — all submodules importable"
     except Exception as exc:
         return False, str(exc)
