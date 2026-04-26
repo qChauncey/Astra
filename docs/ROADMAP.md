@@ -122,13 +122,35 @@ python mock_pipeline.py --phase 2 --seq-len 16 --hidden-dim 256
 
 ## Testing Strategy
 
-| Level | Tool | Coverage target |
-|-------|------|----------------|
-| Unit | pytest | serialization round-trip, cache eviction, haversine |
-| Integration | pytest + threading | mock_pipeline.py Phases 1 & 2 |
-| E2E | pytest + real gRPC | two-process test on localhost |
-| Load | locust or custom | 100 concurrent requests, measure throughput |
-| Hardware CI | self-hosted runner with GPU | KTransformers kernel correctness |
+> 详细方案见 [docs/TESTING.md](TESTING.md)
+
+| 层级 | 工具 | 当前状态 | 覆盖目标 |
+|-----|------|---------|---------|
+| 单元测试（CPU） | pytest | ✅ 70 个，全通过 | 序列化、LRU 缓存、Haversine、DHT、gRPC |
+| 待补充单元测试 | pytest | ❌ 缺失 | `HeterogeneousEngine`、`KVTransfer`、OpenAI API |
+| 集成测试（本地） | pytest + threading | ✅ 已覆盖 | mock_pipeline.py Phase 1 & 2 |
+| 硬件集成测试 | 自托管 GPU Runner | ❌ 未配置 | KTransformers C++ 内核、真实权重数值对齐 |
+| 负载测试 | locust / 自定义 | ❌ 未实现 | 100 并发请求，吞吐量与 P99 延迟 |
+
+### 待完成测试项（Pending）
+
+| 测试文件 | 状态 | 说明 |
+|---------|------|-----|
+| `tests/test_heterogeneous.py` | ❌ 待编写 | `HeterogeneousEngine` 直接单元测试 |
+| `tests/test_kv_transfer.py` | ❌ 待编写 | KV 缓存分块传输与重组 |
+| `tests/test_api.py` | ❌ 待编写 | OpenAI API 端点（httpx AsyncClient） |
+| `.github/workflows/hardware_test.yml` | ❌ 待创建 | 自托管 GPU Runner CI 配置 |
+
+---
+
+## 配套文档
+
+| 文档 | 内容 |
+|-----|-----|
+| [docs/TESTING.md](TESTING.md) | 完整测试方案，含待完成项与硬件测试要求 |
+| [docs/SECURITY.md](SECURITY.md) | 加密方案、威胁模型、差分隐私、mTLS 实施路线 |
+| [docs/FEASIBILITY.md](FEASIBILITY.md) | 算力门槛、地理微集群划分、带宽需求、风险分析 |
+| [docs/COMPLIANCE.md](COMPLIANCE.md) | 许可证合规、DeepSeek 模型使用条款、专利分析 |
 
 ---
 
@@ -139,3 +161,4 @@ python mock_pipeline.py --phase 2 --seq-len 16 --hidden-dim 256
 3. **No checkpoint loading** — weight sharding and loading from safetensors/GGUF is not yet implemented.
 4. **DHT is mocked** — `GeoAwareMoERouter.register_node()` must be called manually; no automatic discovery.
 5. **No authentication** — gRPC connections are insecure. Do not expose ports to the public internet.
+6. **Test coverage gaps** — `HeterogeneousEngine`, `KVTransfer`, and API endpoints have no direct unit tests. See [docs/TESTING.md](TESTING.md) for the full pending test plan.

@@ -103,7 +103,7 @@ class KTransformersStub:
         k = key.astype(np.float32)
         v = value.astype(np.float32)
         scale = 1.0 / math_sqrt(head_dim)
-        scores = q @ k.transpose(-2, -1) * scale
+        scores = q @ k.swapaxes(-2, -1) * scale
         if mask is not None:
             scores = scores + mask.astype(np.float32)
         weights = _softmax(scores, axis=-1)
@@ -417,6 +417,11 @@ class HeterogeneousEngine:
             dst_node=packet.dst_node,
             metadata={**packet.metadata, "compute_ms": f"{elapsed_ms:.2f}"},
         )
+
+    @property
+    def kv_cache(self) -> Dict[int, LayerKVCache]:
+        """Public accessor for the KV cache (used by KVCacheSender/Receiver)."""
+        return self._kv_cache
 
     def clear_kv_cache(self) -> None:
         for cache in self._kv_cache.values():

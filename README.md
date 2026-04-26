@@ -7,7 +7,7 @@
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.9%2B-blue)](https://www.python.org)
-[![Tests](https://img.shields.io/badge/tests-70%20passed-brightgreen)]()
+[![Tests](https://img.shields.io/badge/tests-130%20passed-brightgreen)]()
 [![Status](https://img.shields.io/badge/status-Phase%203%20in%20progress-yellow)]()
 
 **Astra** is an open-source P2P distributed inference framework that runs **DeepSeek-V4-Flash (284B)** across a cluster of commodity PCs (e.g., RTX 5070 Ti, 16 GB VRAM each) by combining:
@@ -184,8 +184,14 @@ docs/
 
 ## Documentation
 
-- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — wire format spec, data flow, security model, scalability targets
-- [docs/ROADMAP.md](docs/ROADMAP.md) — Phase 1 ✓, Phase 2 ✓, Phase 3 task breakdown
+| 文档 | 内容 |
+|-----|-----|
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 系统设计、数据流、传输格式规范 |
+| [docs/ROADMAP.md](docs/ROADMAP.md) | 分阶段实施计划（Phase 1 ✓ · Phase 2 ✓ · Phase 3 进行中） |
+| [docs/TESTING.md](docs/TESTING.md) | 测试方案：已覆盖 70 项 + 待完成测试清单 |
+| [docs/SECURITY.md](docs/SECURITY.md) | 加密方案、mTLS、差分隐私、输出防篡改 |
+| [docs/FEASIBILITY.md](docs/FEASIBILITY.md) | 算力门槛、地理微集群划分、带宽需求分析 |
+| [docs/COMPLIANCE.md](docs/COMPLIANCE.md) | 许可证合规、DeepSeek 模型条款、专利分析 |
 
 ---
 

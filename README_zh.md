@@ -7,7 +7,7 @@
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.9%2B-blue)](https://www.python.org)
-[![Tests](https://img.shields.io/badge/tests-70%20passed-brightgreen)]()
+[![Tests](https://img.shields.io/badge/tests-130%20passed-brightgreen)]()
 [![Status](https://img.shields.io/badge/状态-Phase%203%20进行中-yellow)]()
 
 **Astra** 是一个开源 P2P 分布式推理框架，能够将 **DeepSeek-V4-Flash（284B 参数）** 运行在由普通 PC 组成的集群上（例如配备 RTX 5070 Ti、16 GB 显存的设备）。其核心技术融合自：
@@ -197,6 +197,19 @@ docs/
 | `astra.network.AstraDHT` | 节点发现，可无缝替换为 `hivemind.DHT` |
 | `astra.network.PipelineOrchestrator` | DHT 发现 → 层覆盖校验 → 重试安全的 N 跳串联 |
 | `astra.api.openai_compat` | OpenAI `/v1/chat/completions` + SSE 流式接口 |
+
+---
+
+## 配套文档
+
+| 文档 | 内容 |
+|-----|-----|
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 系统设计、数据流、传输格式规范 |
+| [docs/ROADMAP.md](docs/ROADMAP.md) | 分阶段实施计划 |
+| [docs/TESTING.md](docs/TESTING.md) | 测试方案：已覆盖 70 项 + 待完成测试清单（含不可自动化的硬件测试项） |
+| [docs/SECURITY.md](docs/SECURITY.md) | 节点间加密（mTLS）、隐藏状态隐私保护、输出完整性验证、差分隐私 |
+| [docs/FEASIBILITY.md](docs/FEASIBILITY.md) | 算力门槛、地理微集群划分规则、带宽需求、与同类项目对比 |
+| [docs/COMPLIANCE.md](docs/COMPLIANCE.md) | 所有依赖库的许可证合规分析、DeepSeek 模型使用条款、专利条款 |
 
 ---
 

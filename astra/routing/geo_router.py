@@ -148,6 +148,8 @@ class GeoAwareMoERouter:
         self._nodes: Dict[str, NodeInfo] = {}
         # expert_id → list of node_ids that can serve it
         self._expert_index: Dict[int, List[str]] = {}
+        # cached gate weight matrices keyed by layer_idx
+        self._router_weights: Dict[int, np.ndarray] = {}
 
     # ------------------------------------------------------------------ #
     # Registry                                                              #
@@ -186,10 +188,12 @@ class GeoAwareMoERouter:
         """
         seq_len, hidden_dim = hidden_states.shape
         if router_weights is None:
-            rng = np.random.default_rng(seed=layer_idx)
-            router_weights = rng.standard_normal(
-                (self._num_experts, hidden_dim)
-            ).astype(np.float32)
+            if layer_idx not in self._router_weights:
+                rng = np.random.default_rng(seed=layer_idx)
+                self._router_weights[layer_idx] = rng.standard_normal(
+                    (self._num_experts, hidden_dim)
+                ).astype(np.float32)
+            router_weights = self._router_weights[layer_idx]
 
         logits = hidden_states.astype(np.float32) @ router_weights.T  # (seq, num_experts)
         # DeepSeek-V4 uses sigmoid + top-k rather than softmax

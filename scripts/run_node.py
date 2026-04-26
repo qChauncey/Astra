@@ -122,6 +122,12 @@ def main() -> None:
         help="If >0, also start the OpenAI-compatible API gateway on this port",
     )
     parser.add_argument("--workers", type=int, default=4, help="gRPC thread pool size")
+    parser.add_argument(
+        "--hidden-dim",
+        type=int,
+        default=0,
+        help="Hidden dimension override (0 = use model default 7168; use 256 for mock runs)",
+    )
     parser.add_argument("--verbose", action="store_true")
     args = parser.parse_args()
 
@@ -135,7 +141,8 @@ def main() -> None:
 
     expert_shards = _parse_expert_range(args.experts)
     dmap = _build_device_map(args)
-    dmap.hidden_dim = 256  # use small dim for mock; 7168 for real model
+    if args.hidden_dim > 0:
+        dmap.hidden_dim = args.hidden_dim
 
     log.info("=" * 60)
     log.info("  Astra Node: %s", args.node_id)
