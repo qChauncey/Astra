@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Astra — P2P Inference Dashboard</title>
+<style>
+  :root {
+    --bg: #0f1117;
+    --surface: #1a1d27;
+    --surface2: #22263a;
+    --border: #2e3350;
+    --accent: #6c8ff8;
+    --accent2: #4ade80;
+    --warn: #f59e0b;
+    --danger: #f87171;
+    --text: #e2e8f0;
+    --muted: #64748b;
+    --radius: 10px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+         background: var(--bg); color: var(--text); min-height: 100vh; }
+
+  /* ── Header ── */
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 16px 28px; border-bottom: 1px solid var(--border);
+    background: var(--surface);
+  }
+  header h1 { font-size: 1.2rem; font-weight: 700; letter-spacing: 0.02em; }
+  header h1 span { color: var(--accent); }
+  .status-pill {
+    display: flex; align-items: center; gap: 8px;
+    padding: 6px 14px; border-radius: 999px; font-size: 0.8rem; font-weight: 600;
+    background: var(--surface2); border: 1px solid var(--border);
+  }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+  .dot.online  { background: var(--accent2); box-shadow: 0 0 6px var(--accent2); }
+  .dot.offline { background: var(--danger); }
+
+  /* ── Stub warning ── */
+  .stub-banner {
+    background: #2d1e00; border-bottom: 1px solid #92400e;
+    color: var(--warn); padding: 8px 28px; font-size: 0.78rem; text-align: center;
+  }
+
+  /* ── Layout ── */
+  .layout { display: grid; grid-template-columns: 1fr 380px; height: calc(100vh - 97px); }
+  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+
+  /* ── Left panel ── */
+  .left { overflow-y: auto; padding: 24px 28px; display: flex; flex-direction: column; gap: 20px; }
+
+  /* ── Cards ── */
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px 20px; }
+  .card-title { font-size: 0.72rem; font-weight: 700; text-transform: uppercase;
+                letter-spacing: 0.08em; color: var(--muted); margin-bottom: 14px; }
+
+  /* ── Health row ── */
+  .health-row { display: flex; gap: 16px; flex-wrap: wrap; }
+  .metric { flex: 1; min-width: 100px; background: var(--surface2);
+            border-radius: 8px; padding: 12px 16px; }
+  .metric-val { font-size: 1.6rem; font-weight: 700; color: var(--accent); }
+  .metric-label { font-size: 0.72rem; color: var(--muted); margin-top: 2px; }
+
+  /* ── Node grid ── */
+  .node-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
+  .node-card {
+    background: var(--surface2); border: 1px solid var(--border); border-radius: 8px;
+    padding: 14px 16px; transition: border-color 0.2s;
+  }
+  .node-card:hover { border-color: var(--accent); }
+  .node-id { font-weight: 700; font-size: 0.9rem; margin-bottom: 8px; }
+  .node-row { display: flex; justify-content: space-between;
+              font-size: 0.75rem; color: var(--muted); margin-top: 4px; }
+  .node-row span:last-child { color: var(--text); font-weight: 500; }
+  .node-bar { height: 4px; background: var(--border); border-radius: 2px; margin-top: 10px; }
+  .node-bar-fill { height: 100%; background: var(--accent); border-radius: 2px; }
+
+  /* ── Empty state ── */
+  .empty { text-align: center; padding: 40px 0; color: var(--muted); font-size: 0.85rem; }
+
+  /* ── Right panel: chat ── */
+  .chat-panel {
+    border-left: 1px solid var(--border);
+    display: flex; flex-direction: column;
+    background: var(--surface);
+  }
+  .chat-header {
+    padding: 14px 18px; border-bottom: 1px solid var(--border);
+    font-size: 0.8rem; font-weight: 700; color: var(--muted);
+    text-transform: uppercase; letter-spacing: 0.06em;
+  }
+  .chat-messages {
+    flex: 1; overflow-y: auto; padding: 16px 18px;
+    display: flex; flex-direction: column; gap: 12px;
+  }
+  .msg { max-width: 92%; padding: 10px 14px; border-radius: 10px; font-size: 0.85rem; line-height: 1.5; }
+  .msg.user   { background: var(--accent); color: #fff; align-self: flex-end; border-bottom-right-radius: 3px; }
+  .msg.assistant { background: var(--surface2); border: 1px solid var(--border);
+                   align-self: flex-start; border-bottom-left-radius: 3px; }
+  .msg.system { background: transparent; border: 1px dashed var(--border);
+                color: var(--muted); align-self: center; font-size: 0.75rem; text-align: center; }
+  .chat-input-row {
+    padding: 12px 14px; border-top: 1px solid var(--border);
+    display: flex; gap: 8px;
+  }
+  .chat-input-row input {
+    flex: 1; background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 8px; padding: 10px 14px; color: var(--text);
+    font-size: 0.85rem; outline: none;
+  }
+  .chat-input-row input:focus { border-color: var(--accent); }
+  .chat-input-row button {
+    background: var(--accent); color: #fff; border: none; border-radius: 8px;
+    padding: 10px 18px; font-size: 0.85rem; font-weight: 600; cursor: pointer;
+    transition: opacity 0.15s;
+  }
+  .chat-input-row button:disabled { opacity: 0.4; cursor: not-allowed; }
+  .chat-input-row button:hover:not(:disabled) { opacity: 0.85; }
+  .spinner { display: inline-block; width: 14px; height: 14px;
+             border: 2px solid var(--border); border-top-color: var(--accent);
+             border-radius: 50%; animation: spin 0.7s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>⬡ <span>Astra</span> — P2P Inference Dashboard</h1>
+  <div class="status-pill">
+    <div class="dot" id="status-dot"></div>
+    <span id="status-text">Connecting…</span>
+  </div>
+</header>
+
+<div class="stub-banner">
+  ⚠ numpy stub mode — inference outputs are random arrays. Results will be meaningful after Phase 4 (real model weights).
+</div>
+
+<div class="layout">
+
+  <!-- Left: cluster info -->
+  <div class="left">
+
+    <!-- Health metrics -->
+    <div class="card">
+      <div class="card-title">Cluster Health</div>
+      <div class="health-row">
+        <div class="metric">
+          <div class="metric-val" id="peer-count">—</div>
+          <div class="metric-label">Active nodes</div>
+        </div>
+        <div class="metric">
+          <div class="metric-val" id="layer-coverage">—</div>
+          <div class="metric-label">Layer coverage</div>
+        </div>
+        <div class="metric">
+          <div class="metric-val" id="refresh-age">—</div>
+          <div class="metric-label">Last refresh</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Pipeline topology -->
+    <div class="card">
+      <div class="card-title">Pipeline Topology</div>
+      <div class="node-grid" id="node-grid">
+        <div class="empty">No nodes discovered yet.<br>Start a cluster: <code>python scripts/run_cluster.py --nodes 3 --api-port 8080</code></div>
+      </div>
+    </div>
+
+    <!-- Model info -->
+    <div class="card">
+      <div class="card-title">Model</div>
+      <div class="node-grid" id="model-grid"></div>
+    </div>
+
+  </div>
+
+  <!-- Right: chat -->
+  <div class="chat-panel">
+    <div class="chat-header">Chat — /v1/chat/completions</div>
+    <div class="chat-messages" id="chat-messages">
+      <div class="msg system">Send a message to test the pipeline.<br>Responses are stub output (random tokens).</div>
+    </div>
+    <div class="chat-input-row">
+      <input id="chat-input" type="text" placeholder="Type a message…" />
+      <button id="send-btn" onclick="sendMessage()">Send</button>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ── Config ──────────────────────────────────────────────────────────────────
+const BASE = window.location.origin;   // same host as dashboard
+const REFRESH_MS = 5000;
+
+// ── State ───────────────────────────────────────────────────────────────────
+let lastRefresh = null;
+let totalLayers = 0;
+
+// ── Health + Topology polling ────────────────────────────────────────────────
+async function fetchHealth() {
+  try {
+    const r = await fetch(`${BASE}/health`);
+    const d = await r.json();
+    document.getElementById('peer-count').textContent = d.peers ?? '—';
+    setOnline(true);
+  } catch {
+    setOnline(false);
+  }
+}
+
+async function fetchTopology() {
+  try {
+    const r = await fetch(`${BASE}/v1/pipeline/topology`);
+    const d = await r.json();
+    renderNodes(d.peers || []);
+    lastRefresh = new Date();
+  } catch { /* ignore */ }
+}
+
+async function fetchModels() {
+  try {
+    const r = await fetch(`${BASE}/v1/models`);
+    const d = await r.json();
+    const grid = document.getElementById('model-grid');
+    grid.innerHTML = (d.data || []).map(m => `
+      <div class="node-card">
+        <div class="node-id">${m.id}</div>
+        <div class="node-row"><span>Owner</span><span>${m.owned_by}</span></div>
+        <div class="node-row"><span>Status</span><span style="color:var(--accent2)">available</span></div>
+      </div>`).join('') || '<div class="empty">No models listed.</div>';
+  } catch { /* ignore */ }
+}
+
+function setOnline(online) {
+  document.getElementById('status-dot').className = 'dot ' + (online ? 'online' : 'offline');
+  document.getElementById('status-text').textContent = online ? 'Online' : 'Offline';
+}
+
+function renderNodes(peers) {
+  const grid = document.getElementById('node-grid');
+  if (!peers.length) {
+    grid.innerHTML = '<div class="empty">No nodes discovered.<br>Start a cluster: <code>python scripts/run_cluster.py --nodes 3 --api-port 8080</code></div>';
+    document.getElementById('layer-coverage').textContent = '0 / ?';
+    return;
+  }
+
+  // Compute coverage
+  let covered = 0;
+  let maxLayer = 0;
+  peers.forEach(p => {
+    const [ls, le] = p.layers.split(':').map(Number);
+    covered += le - ls;
+    maxLayer = Math.max(maxLayer, le);
+  });
+  totalLayers = maxLayer;
+  document.getElementById('layer-coverage').textContent = `${covered} / ${maxLayer}`;
+
+  grid.innerHTML = peers.map(p => {
+    const [ls, le] = p.layers.split(':').map(Number);
+    const pct = totalLayers ? Math.round((le - ls) / totalLayers * 100) : 0;
+    const backend = p.backend || 'unknown';
+    const badgeColor = backend.includes('numpy') ? 'var(--warn)' : 'var(--accent2)';
+    return `
+    <div class="node-card">
+      <div class="node-id">${p.node_id}</div>
+      <div class="node-row"><span>Address</span><span>${p.address}</span></div>
+      <div class="node-row"><span>Layers</span><span>${p.layers}</span></div>
+      <div class="node-row"><span>Region</span><span>${p.region}</span></div>
+      <div class="node-row"><span>Backend</span><span style="color:${badgeColor}">${backend}</span></div>
+      <div class="node-row"><span>Experts</span><span>${p.experts}</span></div>
+      <div class="node-bar"><div class="node-bar-fill" style="width:${pct}%"></div></div>
+    </div>`;
+  }).join('');
+}
+
+// ── Refresh age ticker ───────────────────────────────────────────────────────
+setInterval(() => {
+  if (!lastRefresh) return;
+  const secs = Math.round((Date.now() - lastRefresh) / 1000);
+  document.getElementById('refresh-age').textContent = secs + 's ago';
+}, 1000);
+
+// ── Chat ─────────────────────────────────────────────────────────────────────
+const input  = document.getElementById('chat-input');
+const sendBtn = document.getElementById('send-btn');
+const msgBox = document.getElementById('chat-messages');
+
+input.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) sendMessage(); });
+
+function appendMsg(role, content) {
+  const el = document.createElement('div');
+  el.className = `msg ${role}`;
+  el.textContent = content;
+  msgBox.appendChild(el);
+  msgBox.scrollTop = msgBox.scrollHeight;
+  return el;
+}
+
+async function sendMessage() {
+  const text = input.value.trim();
+  if (!text) return;
+
+  input.value = '';
+  sendBtn.disabled = true;
+  appendMsg('user', text);
+
+  const placeholder = appendMsg('assistant', '');
+  const spinner = document.createElement('span');
+  spinner.className = 'spinner';
+  placeholder.appendChild(spinner);
+
+  try {
+    const resp = await fetch(`${BASE}/v1/chat/completions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer astra' },
+      body: JSON.stringify({
+        model: 'deepseek-v4-flash',
+        messages: [{ role: 'user', content: text }],
+        stream: true,
+        max_tokens: 64,
+      }),
+    });
+
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = '';
+    let full = '';
+
+    placeholder.textContent = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      const lines = buf.split('\n');
+      buf = lines.pop();
+      for (const line of lines) {
+        if (!line.startsWith('data:')) continue;
+        const raw = line.slice(5).trim();
+        if (raw === '[DONE]') break;
+        try {
+          const chunk = JSON.parse(raw);
+          const delta = chunk.choices?.[0]?.delta?.content || '';
+          full += delta;
+          placeholder.textContent = full;
+          msgBox.scrollTop = msgBox.scrollHeight;
+        } catch { /* partial JSON */ }
+      }
+    }
+    if (!full) placeholder.textContent = '[empty response]';
+  } catch (err) {
+    placeholder.textContent = `Error: ${err.message}`;
+    placeholder.style.color = 'var(--danger)';
+  } finally {
+    sendBtn.disabled = false;
+    input.focus();
+  }
+}
+
+// ── Init ─────────────────────────────────────────────────────────────────────
+async function refresh() {
+  await fetchHealth();
+  await fetchTopology();
+}
+
+fetchModels();
+refresh();
+setInterval(refresh, REFRESH_MS);
+</script>
+</body>
+</html>
