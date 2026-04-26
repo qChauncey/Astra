@@ -22,26 +22,30 @@ Starts a single Astra inference node:
     with real hivemind for multi-machine deployments).
   - Optionally starts the OpenAI-compatible API gateway on a separate port.
 
+Modes
+-----
+  --mode p2p      (default) Contribute layers to a shared P2P cluster.
+                  Other peers can route requests through this node.
+  --mode offline  Single-machine mode.  The node covers all layers
+                  (0..total-layers) locally.  No P2P discovery needed.
+                  Best for solo testing or when you have no GPU peers.
+
 Usage::
 
-    # Start a node that serves layers 0-30
+    # P2P: contribute layers 0-30 to a cluster
     python scripts/run_node.py \\
-        --node-id node-A \\
-        --port 50051 \\
-        --layer-start 0 \\
-        --layer-end 30 \\
-        --region us-west \\
-        --experts 0-127
+        --node-id node-A --port 50051 \\
+        --layer-start 0 --layer-end 30 --region us-west
 
-    # Start with API gateway
+    # P2P: gateway node with UI
     python scripts/run_node.py \\
-        --node-id gateway \\
-        --port 50051 \\
-        --layer-start 0 \\
-        --layer-end 61 \\
-        --api-port 8080
+        --node-id gateway --port 50051 \\
+        --layer-start 0 --layer-end 61 --api-port 8080
 
-Multi-node example (two terminals on the same machine):
+    # Offline / single-machine (all layers local, UI on port 8080)
+    python scripts/run_node.py --mode offline --api-port 8080
+
+Multi-node P2P example (two terminals):
     Terminal 1: python scripts/run_node.py --node-id A --port 50051 --layer-start 0  --layer-end 30
     Terminal 2: python scripts/run_node.py --node-id B --port 50052 --layer-start 30 --layer-end 61
 """
@@ -93,11 +97,22 @@ def main() -> None:
         description="Launch an Astra pipeline node",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
+    parser.add_argument(
+        "--mode",
+        default="p2p",
+        choices=["p2p", "offline"],
+        help=(
+            "p2p: contribute layers to a distributed cluster; "
+            "offline: run all layers locally on a single machine"
+        ),
+    )
     parser.add_argument("--node-id", default="node-0", help="Unique peer identifier")
     parser.add_argument("--port", type=int, default=50051, help="gRPC listen port")
     parser.add_argument("--host", default="0.0.0.0", help="Bind address (for advertise)")
     parser.add_argument("--layer-start", type=int, default=0)
     parser.add_argument("--layer-end", type=int, default=30)
+    parser.add_argument("--total-layers", type=int, default=61,
+                        help="Total transformer layers (used in offline mode)")
     parser.add_argument(
         "--region",
         default="local",
@@ -143,8 +158,13 @@ def main() -> None:
     if args.hidden_dim > 0:
         dmap.hidden_dim = args.hidden_dim
 
+    # Offline mode: this node owns all layers
+    if args.mode == "offline":
+        args.layer_start = 0
+        args.layer_end = args.total_layers
+
     log.info("=" * 60)
-    log.info("  Astra Node: %s", args.node_id)
+    log.info("  Astra Node: %s  [%s mode]", args.node_id, args.mode.upper())
     log.info("  Port:       %d", args.port)
     log.info("  Layers:     %d – %d", args.layer_start, args.layer_end)
     log.info("  Region:     %s", args.region)
@@ -191,9 +211,13 @@ def main() -> None:
             api_app = create_app(
                 dht=dht,
                 pipeline_config=PipelineConfig(
-                    num_layers=args.layer_end - args.layer_start,
+                    num_layers=args.total_layers,
                     hidden_dim=dmap.hidden_dim,
                 ),
+                node_id=args.node_id,
+                layer_start=args.layer_start,
+                layer_end=args.layer_end,
+                mode=args.mode,
             )
 
             def _run_api() -> None:

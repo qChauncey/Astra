@@ -46,6 +46,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import pathlib
 import time
 import uuid
 import zlib
@@ -53,11 +54,14 @@ from typing import AsyncGenerator, List, Literal, Optional, Union
 
 import numpy as np
 from fastapi import FastAPI, Request
-from fastapi.responses import StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from ..network.dht import AstraDHT
 from ..network.orchestrator import PipelineConfig, PipelineOrchestrator
+
+STATIC_DIR = pathlib.Path(__file__).parent / "static"
 
 
 # ─────────────────────────────────────────────────────────────────────────── #
@@ -149,15 +153,22 @@ def _detokenize(token_ids: List[int]) -> str:
 def create_app(
     dht: Optional[AstraDHT] = None,
     pipeline_config: Optional[PipelineConfig] = None,
+    node_id: str = "astra-node",
+    layer_start: int = 0,
+    layer_end: int = 61,
+    mode: str = "p2p",
 ) -> FastAPI:
     """
     Create and return the FastAPI application.
 
     Parameters
     ----------
-    dht:             AstraDHT instance.  If None, a local DHT is created
-                     (useful for single-process testing).
+    dht:             AstraDHT instance.  If None, a local DHT is created.
     pipeline_config: PipelineConfig for the orchestrator.
+    node_id:         Identifier for this node (shown in UI).
+    layer_start:     First transformer layer this node handles.
+    layer_end:       One-past-last transformer layer this node handles.
+    mode:            "offline" (single-machine) or "p2p" (distributed).
     """
     app = FastAPI(
         title="Astra Inference API",
@@ -168,10 +179,54 @@ def create_app(
     # Runtime state attached to app
     app.state.dht = dht or AstraDHT(node_id="api-gateway")
     app.state.pipeline_config = pipeline_config or PipelineConfig()
+    app.state.node_id = node_id
+    app.state.layer_start = layer_start
+    app.state.layer_end = layer_end
+    app.state.mode = mode
+
+    # Serve static files (dashboard UI)
+    if STATIC_DIR.is_dir():
+        app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
     # ------------------------------------------------------------------ #
     # Routes                                                                #
     # ------------------------------------------------------------------ #
+
+    @app.get("/", include_in_schema=False)
+    async def root():
+        index = STATIC_DIR / "index.html"
+        if index.is_file():
+            return FileResponse(index)
+        return {"message": "Astra API — no UI found, use /v1/chat/completions"}
+
+    @app.get("/api/my-node")
+    async def my_node(raw: Request):
+        """Return this node's identity and configuration."""
+        state = raw.app.state
+        return {
+            "node_id": state.node_id,
+            "layer_start": state.layer_start,
+            "layer_end": state.layer_end,
+            "mode": state.mode,
+            "hidden_dim": state.pipeline_config.hidden_dim,
+            "total_layers": state.pipeline_config.num_layers,
+        }
+
+    @app.get("/api/peers")
+    async def peers(raw: Request):
+        """Return all DHT-registered peers with their metadata."""
+        all_peers = raw.app.state.dht.get_all_peers()
+        result = []
+        for p in all_peers:
+            result.append({
+                "node_id": p.node_id,
+                "address": p.address,
+                "layer_start": p.layer_start,
+                "layer_end": p.layer_end,
+                "geo_region": getattr(p, "geo_region", "unknown"),
+                "backend": getattr(p, "backend", "unknown"),
+            })
+        return {"peers": result, "count": len(result)}
 
     @app.get("/v1/models")
     async def list_models():
