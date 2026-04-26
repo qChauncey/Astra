@@ -7,7 +7,7 @@
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org)
-[![Tests](https://img.shields.io/badge/tests-130%20passed-brightgreen)]()
+[![Tests](https://img.shields.io/badge/tests-150%20passed-brightgreen)]()
 [![CI](https://github.com/qchauncey/astra/actions/workflows/ci.yml/badge.svg)](.github/workflows/ci.yml)
 [![Status](https://img.shields.io/badge/status-Phase%203%20in%20progress-yellow)]()
 
@@ -317,7 +317,7 @@ mock_pipeline.py                # Phase 1 & 2 local simulation harness
 scripts/
 ├── run_node.py                 # Production node launch CLI
 └── check_env.py                # Environment readiness checker
-tests/                          # 130 pytest tests (all passing)
+tests/                          # 150 pytest tests (all passing)
 .github/workflows/ci.yml        # CI: Python 3.10/3.11/3.12 matrix + lint
 docs/
 ├── ARCHITECTURE.md             # Detailed design & wire format spec
@@ -348,7 +348,7 @@ docs/
 |-----|----------|
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | System design, data flow, wire format spec |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | Phase-by-phase plan (Phase 1 ✓ · Phase 2 ✓ · Phase 3 in progress) |
-| [docs/TESTING.md](docs/TESTING.md) | Test strategy: 130 tests covered + pending hardware test checklist |
+| [docs/TESTING.md](docs/TESTING.md) | Test strategy: 150 tests covered + pending hardware test checklist |
 | [docs/SECURITY.md](docs/SECURITY.md) | mTLS encryption, differential privacy, output tamper-proofing |
 | [docs/FEASIBILITY.md](docs/FEASIBILITY.md) | Compute thresholds, geo micro-cluster tiers, bandwidth analysis |
 | [docs/COMPLIANCE.md](docs/COMPLIANCE.md) | License compliance, DeepSeek model terms, patent analysis |
