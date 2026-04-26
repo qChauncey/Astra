@@ -160,6 +160,79 @@ def check_astra_import() -> Tuple[bool, str]:
         return False, str(exc)
 
 
+# Minimum thresholds for inference node eligibility
+_MIN_VRAM_GB   = 16.0   # GPU VRAM for MLA Attention
+_MIN_RAM_GB    = 64.0   # CPU RAM for MoE FFN experts
+_MIN_DISK_GB   = 100.0  # NVMe free space for weight mmap
+
+
+def check_inference_eligibility(results: "Dict[str, Any]") -> Tuple[str, str]:
+    """
+    Derive the node's eligible cluster role from check results.
+
+    Returns (role, reason) where role is one of:
+      "inference"  — can serve as a full inference pipeline node
+      "gateway"    — can serve as API gateway or DHT node only
+      "dev"        — missing core deps; development / testing only
+    """
+    required_ok = all(
+        results.get(k, {}).get("ok", False)
+        for k in ("Python ≥3.10", "numpy", "psutil", "grpcio", "astra package")
+    )
+    if not required_ok:
+        return "dev", "Missing required dependencies — development / testing only"
+
+    # Check GPU VRAM via PyTorch
+    vram_ok = False
+    vram_detail = "no CUDA GPU detected"
+    try:
+        import torch
+        if torch.cuda.is_available():
+            max_vram = max(
+                torch.cuda.get_device_properties(i).total_memory
+                for i in range(torch.cuda.device_count())
+            ) / 1024 ** 3
+            vram_ok = max_vram >= _MIN_VRAM_GB
+            vram_detail = f"best GPU VRAM = {max_vram:.1f} GB (need ≥{_MIN_VRAM_GB:.0f} GB)"
+    except Exception:
+        pass
+
+    # Check system RAM
+    ram_ok = False
+    ram_detail = "unknown"
+    try:
+        import psutil
+        ram_gb = psutil.virtual_memory().total / 1024 ** 3
+        ram_ok = ram_gb >= _MIN_RAM_GB
+        ram_detail = f"RAM = {ram_gb:.1f} GB (need ≥{_MIN_RAM_GB:.0f} GB)"
+    except Exception:
+        pass
+
+    # Check disk
+    disk_ok = False
+    disk_detail = "unknown"
+    try:
+        import psutil
+        root = "C:\\" if platform.system() == "Windows" else "/"
+        free_gb = psutil.disk_usage(root).free / 1024 ** 3
+        disk_ok = free_gb >= _MIN_DISK_GB
+        disk_detail = f"free disk = {free_gb:.1f} GB (need ≥{_MIN_DISK_GB:.0f} GB)"
+    except Exception:
+        pass
+
+    if vram_ok and ram_ok and disk_ok:
+        return "inference", "✓ GPU VRAM, RAM, and disk all meet minimums — eligible as inference node"
+
+    reasons = []
+    if not vram_ok:
+        reasons.append(vram_detail)
+    if not ram_ok:
+        reasons.append(ram_detail)
+    if not disk_ok:
+        reasons.append(disk_detail)
+    return "gateway", "Cannot serve as inference node: " + "; ".join(reasons)
+
+
 # ─────────────────────────────────────────────────────────────────────────── #
 
 def run_checks() -> Dict[str, Any]:
@@ -236,6 +309,21 @@ def print_report(results: Dict[str, Any]) -> None:
         for r in recs:
             print(f"    {r}")
         print()
+
+    # Node role eligibility verdict
+    role, reason = check_inference_eligibility(results)
+    role_labels = {
+        "inference": ("\033[92m INFERENCE NODE \033[0m", "Can join cluster as a full pipeline inference node"),
+        "gateway":   ("\033[93m API GATEWAY    \033[0m", "Can run as API gateway or DHT discovery node only"),
+        "dev":       ("\033[91m DEV / TEST ONLY\033[0m", "Cannot join cluster; use for development and testing"),
+    }
+    label, desc = role_labels[role]
+    print("=" * 72)
+    print(f"  Node role eligibility:{label}")
+    print(f"  {desc}")
+    print(f"  {reason}")
+    print("=" * 72)
+    print()
 
 
 def main() -> None:

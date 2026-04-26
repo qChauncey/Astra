@@ -25,14 +25,25 @@
 
 | Component | Linux | macOS | Windows |
 |-----------|:-----:|:-----:|:-------:|
-| numpy stub (no GPU) | ✅ Native | ✅ Native | ✅ Native |
-| gRPC pipeline | ✅ Native | ✅ Native | ✅ Native |
-| OpenAI API gateway | ✅ Native | ✅ Native | ✅ Native |
-| `check_env.py` | ✅ Native | ✅ Native | ✅ Native |
-| KTransformers C++ kernel | ✅ Native | ⚠️ Build from source | ⚠️ WSL2 + CUDA |
+| Development & testing | ✅ | ✅ | ✅ |
+| API Gateway node | ✅ | ✅ | ✅ |
+| DHT discovery node | ✅ | ✅ | ✅ |
+| **Inference node** (real compute) | ✅ CUDA | ❌ | ⚠️ WSL2 + CUDA |
+| KTransformers C++ kernel | ✅ Native | ❌ | ⚠️ WSL2 |
 
-**GPU inference on Windows** requires WSL2 — see the [step-by-step guide](#windows--gpu-inference-via-wsl2) below.  
-**numpy stub mode** (no GPU) runs natively on all three platforms without any additional setup.
+### What each hardware config can do
+
+| Config | Inference compute | API Gateway | DHT node | Dev / test |
+|--------|:-----------------:|:-----------:|:--------:|:----------:|
+| Linux + NVIDIA GPU | ✅ | ✅ | ✅ | ✅ |
+| Linux CPU-only | ❌ | ✅ | ✅ | ✅ |
+| macOS (any) | ❌ | ✅ | ✅ | ✅ |
+| Windows + GPU (WSL2) | ✅ | ✅ | ✅ | ✅ |
+| Windows no GPU (native) | ❌ | ✅ | ✅ | ✅ |
+
+> **No GPU = no inference contribution.** The numpy stub produces random outputs — it is only for development and testing, not for joining a real inference cluster.  
+> To contribute actual compute on Windows, use [WSL2 + CUDA](#windows--gpu-inference-via-wsl2).  
+> Without a GPU you can still run an **API Gateway** (handles user HTTP requests, routes to GPU peers) or a **DHT node** (peer discovery only).
 
 ---
 
@@ -73,7 +84,7 @@ python scripts/run_node.py --node-id node-A --port 50051 \
 
 ### macOS
 
-Astra runs fully on macOS in numpy stub mode (CPU-only). KTransformers C++ kernels require CUDA and are not available on Apple Silicon or Intel Mac.
+KTransformers C++ kernels require CUDA and are unavailable on macOS. Mac nodes **cannot contribute inference compute** to the cluster. Valid roles: API Gateway, DHT discovery node, development.
 
 ```bash
 # Install Homebrew if needed (https://brew.sh)
@@ -82,12 +93,15 @@ brew install python@3.11 git
 git clone https://github.com/qchauncey/astra.git && cd astra
 pip3 install -e ".[proto]"
 
+# Environment check and local testing
 python scripts/check_env.py
 python mock_pipeline.py --seq-len 32 --hidden-dim 256
 
-# Start a node (numpy stub, no GPU)
-python scripts/run_node.py --node-id node-A --port 50051 \
-    --layer-start 0 --layer-end 30 --hidden-dim 256 --api-port 8080
+# Role 1: API Gateway — receives user requests, routes to GPU peers
+python scripts/run_node.py --node-id gateway --port 50051 --api-port 8080
+
+# Role 2: DHT discovery node only (no API, no inference)
+python scripts/run_node.py --node-id dht-node --port 50051
 ```
 
 > **Apple Silicon note:** MPS (Metal Performance Shaders) backend is not yet integrated. Full GPU inference on Mac requires a future MPS adapter. Contributions welcome.
@@ -96,7 +110,8 @@ python scripts/run_node.py --node-id node-A --port 50051 \
 
 ### Windows — No GPU (native)
 
-Run directly in PowerShell or Command Prompt. No WSL2 required for the numpy stub.
+Without a GPU, a Windows node **cannot contribute inference compute**. Valid roles: API Gateway, DHT discovery node, development and testing.  
+To contribute real compute, use [WSL2 + CUDA](#windows--gpu-inference-via-wsl2).
 
 ```powershell
 # Install Python 3.10+ from https://python.org (check "Add to PATH")
@@ -106,12 +121,15 @@ git clone https://github.com/qchauncey/astra.git
 cd astra
 pip install -e ".[proto]"
 
+# Environment check and local testing
 python scripts/check_env.py
 python mock_pipeline.py --seq-len 32 --hidden-dim 256
 
-# Start a node (numpy stub, no GPU)
-python scripts/run_node.py --node-id node-A --port 50051 `
-    --layer-start 0 --layer-end 30 --hidden-dim 256 --api-port 8080
+# Role 1: API Gateway — receives user HTTP requests, routes to GPU peers in the cluster
+python scripts/run_node.py --node-id gateway --port 50051 --api-port 8080
+
+# Role 2: DHT discovery node only (peer discovery, no inference)
+python scripts/run_node.py --node-id dht-node --port 50051
 ```
 
 ---

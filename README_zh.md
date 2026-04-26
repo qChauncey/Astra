@@ -25,14 +25,25 @@
 
 | 功能模块 | Linux | macOS | Windows |
 |---------|:-----:|:-----:|:-------:|
-| numpy stub 推理（无需 GPU） | ✅ 原生 | ✅ 原生 | ✅ 原生 |
-| gRPC 流水线 | ✅ 原生 | ✅ 原生 | ✅ 原生 |
-| OpenAI API 网关 | ✅ 原生 | ✅ 原生 | ✅ 原生 |
-| `check_env.py` 环境检测 | ✅ 原生 | ✅ 原生 | ✅ 原生 |
-| KTransformers C++ 内核 | ✅ 原生 | ⚠️ 需自行编译 | ⚠️ WSL2 + CUDA |
+| 开发与测试 | ✅ | ✅ | ✅ |
+| API 网关节点 | ✅ | ✅ | ✅ |
+| DHT 发现节点 | ✅ | ✅ | ✅ |
+| **推理节点**（真实算力） | ✅ CUDA | ❌ | ⚠️ WSL2 + CUDA |
+| KTransformers C++ 内核 | ✅ 原生 | ❌ | ⚠️ WSL2 |
 
-**Windows GPU 推理**需通过 WSL2 实现，详见[下方分步指南](#windows--gpu-推理via-wsl2)。  
-**numpy stub 模式**（无 GPU）在三个平台均可直接运行，无需额外配置。
+### 各硬件配置能做什么
+
+| 配置 | 推理算力 | API 网关 | DHT 节点 | 开发/测试 |
+|------|:-------:|:-------:|:-------:|:--------:|
+| Linux + NVIDIA GPU | ✅ | ✅ | ✅ | ✅ |
+| Linux 纯 CPU | ❌ | ✅ | ✅ | ✅ |
+| macOS（任意） | ❌ | ✅ | ✅ | ✅ |
+| Windows + GPU（WSL2） | ✅ | ✅ | ✅ | ✅ |
+| Windows 无 GPU（原生） | ❌ | ✅ | ✅ | ✅ |
+
+> **无 GPU = 无推理贡献。** numpy stub 模式输出的是随机数组，仅用于开发和测试，不能接入真实推理集群。  
+> 要在 Windows 上贡献真实算力，请使用 [WSL2 + CUDA](#windows--gpu-推理via-wsl2)。  
+> 无 GPU 时，仍可运行 **API 网关**（接收用户 HTTP 请求并转发给 GPU 节点）或 **DHT 节点**（纯节点发现，不参与计算）。
 
 ---
 
@@ -73,7 +84,7 @@ python scripts/run_node.py --node-id node-A --port 50051 \
 
 ### macOS
 
-Astra 在 macOS 上以 numpy stub 模式（纯 CPU）完整运行。KTransformers C++ 内核依赖 CUDA，不支持 Apple Silicon 和 Intel Mac。
+KTransformers C++ 内核依赖 CUDA，macOS 上不可用。Mac 节点**无法向集群贡献推理算力**，可用角色：API 网关、DHT 发现节点、开发与测试。
 
 ```bash
 # 安装 Homebrew（若尚未安装）：https://brew.sh
@@ -82,12 +93,15 @@ brew install python@3.11 git
 git clone https://github.com/qchauncey/astra.git && cd astra
 pip3 install -e ".[proto]"
 
+# 环境检查与本地测试
 python scripts/check_env.py
 python mock_pipeline.py --seq-len 32 --hidden-dim 256
 
-# 启动节点（numpy stub，无 GPU）
-python scripts/run_node.py --node-id node-A --port 50051 \
-    --layer-start 0 --layer-end 30 --hidden-dim 256 --api-port 8080
+# 角色一：API 网关 — 接收用户 HTTP 请求，转发至集群中的 GPU 节点
+python scripts/run_node.py --node-id gateway --port 50051 --api-port 8080
+
+# 角色二：纯 DHT 发现节点（仅 peer discovery，不参与推理）
+python scripts/run_node.py --node-id dht-node --port 50051
 ```
 
 > **Apple Silicon 说明：** MPS（Metal Performance Shaders）后端尚未集成。Mac 上的完整 GPU 推理待后续 MPS 适配器支持，欢迎贡献。
@@ -96,7 +110,8 @@ python scripts/run_node.py --node-id node-A --port 50051 \
 
 ### Windows — 无 GPU（原生）
 
-直接在 PowerShell 或命令提示符中运行，numpy stub 模式无需 WSL2。
+无 GPU 的 Windows 节点**无法向集群贡献推理算力**，可用角色：API 网关、DHT 发现节点、开发与测试。  
+要贡献真实算力，请使用 [WSL2 + CUDA](#windows--gpu-推理via-wsl2)。
 
 ```powershell
 # 安装 Python 3.10+：https://python.org（勾选"Add to PATH"）
@@ -106,12 +121,15 @@ git clone https://github.com/qchauncey/astra.git
 cd astra
 pip install -e ".[proto]"
 
+# 环境检查与本地测试
 python scripts/check_env.py
 python mock_pipeline.py --seq-len 32 --hidden-dim 256
 
-# 启动节点（numpy stub，无 GPU）
-python scripts/run_node.py --node-id node-A --port 50051 `
-    --layer-start 0 --layer-end 30 --hidden-dim 256 --api-port 8080
+# 角色一：API 网关 — 接收用户 HTTP 请求，转发至集群中的 GPU 节点
+python scripts/run_node.py --node-id gateway --port 50051 --api-port 8080
+
+# 角色二：纯 DHT 发现节点（仅 peer discovery，不参与推理）
+python scripts/run_node.py --node-id dht-node --port 50051
 ```
 
 ---
