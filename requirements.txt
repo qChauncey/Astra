@@ -1,0 +1,28 @@
+# Astra — Core dependencies
+# Licensed under Apache License 2.0
+
+# ── Required ─────────────────────────────────────────────────────────────────
+numpy>=1.24.0
+grpcio>=1.60.0
+grpcio-tools>=1.60.0          # for proto compilation only
+protobuf>=4.25.0
+fastapi>=0.110.0
+uvicorn[standard]>=0.27.0
+httpx>=0.26.0
+
+# ── Optional: GPU inference ───────────────────────────────────────────────────
+# torch>=2.2.0                 # install from https://pytorch.org
+# torchvision>=0.17.0
+
+# ── Optional: KTransformers heterogeneous C++ kernels ────────────────────────
+# ktransformers>=0.2.0         # build from https://github.com/kvcache-ai/ktransformers
+
+# ── Optional: P2P DHT node discovery (Phase 3) ───────────────────────────────
+# hivemind>=1.1.0              # pip install hivemind
+
+# ── Development ──────────────────────────────────────────────────────────────
+# pytest>=8.0.0
+# pytest-asyncio>=0.23.0
+# black>=24.0.0
+# ruff>=0.3.0
+# mypy>=1.9.0

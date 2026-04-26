@@ -1,0 +1,102 @@
+// Copyright 2025 Project Astra Contributors
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package astra.inference.v1;
+
+// ─── Tensor packet ────────────────────────────────────────────────────────── //
+
+message TensorFrame {
+  // Serialized TensorPacket wire bytes (Astra binary format).
+  // The receiver calls TensorSerializer.deserialize() on this field.
+  bytes  payload     = 1;
+  uint64 byte_len    = 2;
+  // Checksum (CRC32 of payload) for integrity verification on high-latency WAN links.
+  uint32 crc32       = 3;
+}
+
+// ─── Core inference RPC ───────────────────────────────────────────────────── //
+
+message InferenceRequest {
+  string      request_id       = 1;
+  TensorFrame hidden_states    = 2;
+  // Layer range this node should compute.
+  int32       layer_start      = 3;
+  int32       layer_end        = 4;
+  // Expert IDs pre-selected by the upstream MoE router (empty = let node gate).
+  repeated int32 selected_experts = 5;
+  bool        use_kv_cache     = 6;
+  string      src_node         = 7;
+  string      dst_node         = 8;
+  // Routing metadata forwarded unchanged through the pipeline.
+  map<string, string> metadata = 9;
+}
+
+message InferenceResponse {
+  string      request_id       = 1;
+  TensorFrame output_states    = 2;
+  string      node_id          = 3;
+  float       compute_time_ms  = 4;
+  bool        success          = 5;
+  string      error_message    = 6;
+  map<string, string> metadata = 7;
+}
+
+// ─── Health / discovery ───────────────────────────────────────────────────── //
+
+message PingRequest {
+  string node_id    = 1;
+  int64  timestamp  = 2;
+}
+
+message PingResponse {
+  string node_id    = 1;
+  bool   ready      = 2;
+  string geo_region = 3;
+  int32  layer_start = 4;
+  int32  layer_end   = 5;
+  repeated int32 expert_shards = 6;
+  string backend    = 7;    // "ktransformers" | "numpy_stub"
+  float  gpu_util   = 8;    // 0.0–1.0
+  float  cpu_util   = 9;
+}
+
+// ─── KV-cache streaming (future / Phase 3) ────────────────────────────────── //
+
+message KVCacheChunk {
+  string request_id = 1;
+  int32  layer_idx  = 2;
+  bytes  k_bytes    = 3;
+  bytes  v_bytes    = 4;
+  repeated int32 k_shape = 5;
+  repeated int32 v_shape = 6;
+  string dtype      = 7;
+}
+
+// ─── Service definition ───────────────────────────────────────────────────── //
+
+service InferenceService {
+  // Primary inference call: send hidden states, receive output states.
+  rpc RunLayer (InferenceRequest) returns (InferenceResponse);
+
+  // Streaming variant: stream token chunks for long sequences.
+  rpc RunLayerStream (stream InferenceRequest) returns (stream InferenceResponse);
+
+  // Health check and capability advertisement.
+  rpc Ping (PingRequest) returns (PingResponse);
+
+  // (Phase 3) Stream KV cache to a peer for memory offload.
+  rpc TransferKVCache (stream KVCacheChunk) returns (PingResponse);
+}
