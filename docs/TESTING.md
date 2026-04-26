@@ -6,11 +6,11 @@
 
 ## 1. 当前测试状态（诚实评估）
 
-### 1.1 已通过的自动化测试（70 个，可在 CI 中运行）
+### 1.1 已通过的自动化测试（149 个，可在 CI 中运行）
 
 ```
 python -m pytest tests/ -v
-# 70 passed in ~3s（纯 CPU / NumPy 环境）
+# 149 passed in ~5s（纯 CPU / NumPy 环境）
 ```
 
 | 测试文件 | 覆盖范围 | 测试数 |
@@ -21,14 +21,21 @@ python -m pytest tests/ -v
 | `test_dht.py` | TTL 过期、订阅回调、节点注销、专家/层查询 | 14 |
 | `test_pipeline_grpc.py` | gRPC 单跳/双跳/流式、Ping、CRC 校验（间接调用 HeterogeneousEngine） | 10 |
 | `test_orchestrator.py` | N 节点串联、覆盖缺口检测、重试路径 | 9 |
+| `test_heterogeneous.py` | `_attention_forward`、`_moe_forward`、KV cache 累积、`DeviceMap` 配置 | 23 |
+| `test_kv_transfer.py` | `KVCacheSender`、`KVCacheReceiver` 重组、分块逻辑 | 20 |
+| `test_api.py` | `/v1/chat/completions`（普通 + 流式）、`/health`、`/v1/pipeline/topology` | 23 |
+| `test_check_env.py` | 环境检查工具逻辑验证 | 14 |
 
-### 1.2 明确的覆盖空缺（待补充）
+### 1.2 已填补的覆盖空缺（Phase 3 完成）
+
+所有在 Phase 1/2 标记为"待补充"的测试文件现已编写并纳入 CI 流水线。`test_heterogeneous.py`、`test_kv_transfer.py` 和 `test_api.py` 直接测试各自模块，共计 66 个新测试。
+
+#### 剩余覆盖空缺（待补充）
 
 | 模块 | 缺失内容 | 原因 |
 |------|---------|------|
-| `inference/heterogeneous.py` | `_attention_forward`、`_moe_forward`、KV cache 累积、`DeviceMap` 各配置 | 没有独立 `test_heterogeneous.py` |
-| `rpc/kv_transfer.py` | `KVCacheSender`、`KVCacheReceiver` 重组、分块逻辑 | 没有对应测试文件 |
-| `api/openai_compat.py` | `/v1/chat/completions`（普通 + 流式）、`/health`、`/v1/pipeline/topology` | 没有对应测试文件 |
+| `scripts/run_node.py` | CLI 参数解析、环境变量绑定、信号处理 | 需要集成测试环境（非纯单元测试） |
+| `scripts/run_cluster.py` | 多进程启动、端口分配、清理逻辑 | 同上 |
 
 ### 1.3 无法在当前环境运行的测试（需真实硬件）
 
@@ -45,12 +52,12 @@ python -m pytest tests/ -v
 
 ---
 
-## 2. 待完成测试计划（Pending）
+## 2. 测试计划状态
 
-### 2.1 `test_heterogeneous.py`（待编写）
+### 2.1 `test_heterogeneous.py`（✅ 已完成）
 
 ```python
-# 目标测试用例清单
+# 已实现的测试用例
 class TestHeterogeneousEngine:
     test_attention_forward_shape()          # 输出形状 == 输入形状
     test_attention_forward_residual()       # 残差连接：||out - in|| > 0
@@ -64,11 +71,10 @@ class TestHeterogeneousEngine:
     test_engine_stats_keys()              # stats() 包含必要字段
 ```
 
-### 2.2 `test_kv_transfer.py`（待编写）
+### 2.2 `test_kv_transfer.py`（✅ 已完成）
 
 ```python
 class TestKVTransfer:
-    # 需要启动一个 InferenceServer + KVCacheSender → 验证接收端 engine 内缓存
     test_sender_push_empty_cache()          # 空 cache 时不抛异常，返回 True
     test_chunk_size_within_limit()          # 每块 <= MAX_CHUNK_BYTES (3 MB)
     test_receiver_reassemble_shape()        # 重组后 k.shape == 原始 k.shape
@@ -77,7 +83,7 @@ class TestKVTransfer:
     test_crc_on_chunk_corruption()         # 模拟数据损坏时抛出错误（Phase 3）
 ```
 
-### 2.3 `test_api.py`（待编写，需 httpx AsyncClient）
+### 2.3 `test_api.py`（✅ 已完成，需 httpx AsyncClient）
 
 ```python
 class TestOpenAIAPI:
@@ -119,11 +125,12 @@ jobs:
 │  Layer 3: 端到端集成（本地双进程 gRPC）          │  ← PR 合并前
 │  mock_pipeline.py Phase 1 & 2 作为 pytest 用例  │
 ├─────────────────────────────────────────────────┤
-│  Layer 2: 组件集成（现有 70 个测试）             │  ← 每次 push
-│  序列化 · gRPC · DHT · Orchestrator             │
+│  Layer 2: 组件集成（现有 149 个测试）            │  ← 每次 push
+│  序列化 · gRPC · DHT · Orchestrator ·           │
+│  HeterogeneousEngine · KVTransfer · API         │
 ├─────────────────────────────────────────────────┤
-│  Layer 1: 纯单元测试（待补充）                   │  ← 每次 push
-│  HeterogeneousEngine · KVTransfer · API          │
+│  Layer 1: 纯单元测试（✅ 已完成）                │  ← 每次 push
+│  HeterogeneousEngine · KVTransfer · API         │
 └─────────────────────────────────────────────────┘
 ```
 
@@ -144,4 +151,3 @@ python -m pytest tests/test_pipeline_grpc.py -v
 # 运行 mock pipeline 模拟（Phase 1 & 2 端到端脚本，非 pytest）
 python mock_pipeline.py --phase 1 --seq-len 16 --hidden-dim 256
 python mock_pipeline.py --phase 2 --seq-len 16 --hidden-dim 256
-```
