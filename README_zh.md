@@ -25,44 +25,28 @@
 
 | 功能模块 | Linux | macOS | Windows |
 |---------|:-----:|:-----:|:-------:|
-| numpy stub 推理（无需 GPU） | ✅ | ✅ | ✅ |
-| gRPC 流水线 | ✅ | ✅ | ✅ |
-| OpenAI API 网关 | ✅ | ✅ | ✅ |
-| `check_env.py` 环境检测 | ✅ | ✅ | ✅ |
-| KTransformers C++ 内核 | ✅ | ⚠️ 需自行编译 | ⚠️ WSL2 + CUDA |
+| numpy stub 推理（无需 GPU） | ✅ 原生 | ✅ 原生 | ✅ 原生 |
+| gRPC 流水线 | ✅ 原生 | ✅ 原生 | ✅ 原生 |
+| OpenAI API 网关 | ✅ 原生 | ✅ 原生 | ✅ 原生 |
+| `check_env.py` 环境检测 | ✅ 原生 | ✅ 原生 | ✅ 原生 |
+| KTransformers C++ 内核 | ✅ 原生 | ⚠️ 需自行编译 | ⚠️ WSL2 + CUDA |
 
-> **Windows GPU 推理**通过 **WSL2**（Windows Subsystem for Linux 2）支持。
-> NVIDIA 的 WSL2 CUDA 驱动可将 GPU 透传到 Linux 环境，KTransformers 在 WSL2 内的运行与原生 Linux 完全一致。
->
-> numpy stub 模式（无 GPU）可在 Windows 原生环境直接运行，无需 WSL2。
-
-### Windows WSL2 配置指南
-
-```powershell
-# 1. 安装 WSL2（以管理员身份运行 PowerShell）
-wsl --install -d Ubuntu-22.04
-
-# 2. 在 Windows 宿主机安装 NVIDIA WSL2 CUDA 驱动（不是在 WSL 内）
-#    下载地址：https://developer.nvidia.com/cuda/wsl
-#    注意：宿主机只需安装驱动，不要在 Windows 上安装 CUDA Toolkit。
-
-# 3. 进入 WSL2 Ubuntu 终端，安装 CUDA Toolkit 和编译工具
-wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-keyring_1.1-1_all.deb
-sudo dpkg -i cuda-keyring_1.1-1_all.deb
-sudo apt-get update && sudo apt-get install -y cuda-toolkit-12-4 build-essential
-
-# 4. 在 WSL2 内克隆并安装 Astra
-git clone https://github.com/qchauncey/astra.git && cd astra
-pip install -e ".[proto]"
-
-# 5. 验证 GPU 可见
-nvidia-smi
-python scripts/check_env.py
-```
+**Windows GPU 推理**需通过 WSL2 实现，详见[下方分步指南](#windows--gpu-推理via-wsl2)。  
+**numpy stub 模式**（无 GPU）在三个平台均可直接运行，无需额外配置。
 
 ---
 
 ## 快速开始
+
+跳转到对应平台：
+- [Linux](#linux)
+- [macOS](#macos)
+- [Windows — 无 GPU（原生）](#windows--无-gpu原生)
+- [Windows — GPU 推理 via WSL2](#windows--gpu-推理via-wsl2)
+
+---
+
+### Linux
 
 ```bash
 # 1. 克隆并安装
@@ -75,11 +59,125 @@ python scripts/check_env.py
 # 3. 运行 Mock 流水线（无需 GPU）
 python mock_pipeline.py --seq-len 32 --hidden-dim 256
 
-# 4. 启动一个节点（同时开启 OpenAI 兼容 API，端口 8080）
+# 4. 启动节点（同时开启 OpenAI 兼容 API，端口 8080）
 #    --hidden-dim 256 使用 mock 维度；真实模型省略此参数（默认 7168）
 python scripts/run_node.py --node-id node-A --port 50051 \
     --layer-start 0 --layer-end 30 --hidden-dim 256 --api-port 8080
+
+# 5. GPU 模式（需要 CUDA + KTransformers）
+python scripts/run_node.py --node-id node-A --port 50051 \
+    --layer-start 0 --layer-end 30 --gpu --api-port 8080
 ```
+
+---
+
+### macOS
+
+Astra 在 macOS 上以 numpy stub 模式（纯 CPU）完整运行。KTransformers C++ 内核依赖 CUDA，不支持 Apple Silicon 和 Intel Mac。
+
+```bash
+# 安装 Homebrew（若尚未安装）：https://brew.sh
+brew install python@3.11 git
+
+git clone https://github.com/qchauncey/astra.git && cd astra
+pip3 install -e ".[proto]"
+
+python scripts/check_env.py
+python mock_pipeline.py --seq-len 32 --hidden-dim 256
+
+# 启动节点（numpy stub，无 GPU）
+python scripts/run_node.py --node-id node-A --port 50051 \
+    --layer-start 0 --layer-end 30 --hidden-dim 256 --api-port 8080
+```
+
+> **Apple Silicon 说明：** MPS（Metal Performance Shaders）后端尚未集成。Mac 上的完整 GPU 推理待后续 MPS 适配器支持，欢迎贡献。
+
+---
+
+### Windows — 无 GPU（原生）
+
+直接在 PowerShell 或命令提示符中运行，numpy stub 模式无需 WSL2。
+
+```powershell
+# 安装 Python 3.10+：https://python.org（勾选"Add to PATH"）
+# 安装 Git：https://git-scm.com
+
+git clone https://github.com/qchauncey/astra.git
+cd astra
+pip install -e ".[proto]"
+
+python scripts/check_env.py
+python mock_pipeline.py --seq-len 32 --hidden-dim 256
+
+# 启动节点（numpy stub，无 GPU）
+python scripts/run_node.py --node-id node-A --port 50051 `
+    --layer-start 0 --layer-end 30 --hidden-dim 256 --api-port 8080
+```
+
+---
+
+### Windows — GPU 推理（via WSL2）
+
+KTransformers 依赖 Linux + CUDA。在 Windows 上，WSL2 提供完整 Linux 内核并透传 GPU，Astra 在其中的运行与原生 Linux 完全一致。
+
+**前置条件**
+- Windows 10 21H2 或更高版本 / Windows 11
+- NVIDIA GPU，驱动版本 ≥ 535（在 PowerShell 中执行 `nvidia-smi` 确认）
+
+**第一步 — 启用 WSL2** *（以管理员身份运行 PowerShell）*
+
+```powershell
+wsl --install -d Ubuntu-22.04
+# 按提示重启 Windows，然后从开始菜单打开"Ubuntu 22.04"
+```
+
+**第二步 — 安装 NVIDIA WSL2 CUDA 驱动** *（在 Windows 宿主机上，不是在 WSL 内）*
+
+1. 从以下地址下载支持 WSL2 的显示驱动：https://developer.nvidia.com/cuda/wsl  
+2. 在 **Windows** 上像普通驱动一样安装。  
+3. **不要**在 Windows 上安装 CUDA Toolkit，Toolkit 只安装在 WSL2 内部。
+
+**第三步 — 在 WSL2 Ubuntu 内安装 CUDA Toolkit**
+
+```bash
+# 以下命令在 WSL2 Ubuntu 终端内执行
+wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-keyring_1.1-1_all.deb
+sudo dpkg -i cuda-keyring_1.1-1_all.deb
+sudo apt-get update
+sudo apt-get install -y cuda-toolkit-12-4 build-essential python3-pip git
+
+# 验证 GPU 可见
+nvidia-smi
+```
+
+正常输出应显示 GPU 型号、驱动版本和 CUDA 版本。
+
+**第四步 — 在 WSL2 内克隆并运行 Astra**
+
+```bash
+git clone https://github.com/qchauncey/astra.git && cd astra
+pip3 install -e ".[proto]"
+
+# 环境检查
+python scripts/check_env.py
+
+# Mock 流水线（纯 CPU，快速验证）
+python mock_pipeline.py --seq-len 32 --hidden-dim 256
+
+# 启动带 GPU 的节点
+python scripts/run_node.py --node-id node-A --port 50051 \
+    --layer-start 0 --layer-end 30 --gpu --api-port 8080
+```
+
+**WSL2 使用提示**
+
+| 问题 | 说明 |
+|------|------|
+| 访问 Windows 文件 | WSL2 内通过 `/mnt/c/`、`/mnt/d/` 等路径访问 |
+| 网络端口 | WSL2 端口在 Windows 侧通过 `localhost:<端口>` 访问，无需额外配置 |
+| GPU 驱动 | 共享 Windows 宿主机驱动，**不要**在 WSL2 内单独安装 GPU 驱动 |
+| 多机部署 | 每台 Windows 机器运行各自的 WSL2，gRPC 流水线与 Linux 原生行为一致 |
+| 性能开销 | 相比裸机 Linux 约有 3–5% 额外开销，对内存带宽瓶颈的 MoE 负载影响可忽略 |
 
 ---
 
