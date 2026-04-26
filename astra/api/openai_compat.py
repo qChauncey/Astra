@@ -49,7 +49,6 @@ import os
 import pathlib
 import time
 import uuid
-import zlib
 from typing import AsyncGenerator, List, Literal, Optional, Union
 
 import numpy as np
@@ -58,6 +57,7 @@ from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
+from ..inference.tokenizer import get_tokenizer
 from ..network.dht import AstraDHT
 from ..network.orchestrator import PipelineConfig, PipelineOrchestrator
 
@@ -126,24 +126,18 @@ class ChatCompletionResponse(BaseModel):
 
 
 # ─────────────────────────────────────────────────────────────────────────── #
-# Minimal tokenizer stub                                                        #
+# Tokenizer helpers (delegated to astra.inference.tokenizer)                   #
 # ─────────────────────────────────────────────────────────────────────────── #
 
 def _tokenize(text: str) -> List[int]:
-    """
-    Whitespace tokenizer stand-in.
-    Production: replace with DeepSeek-V4 tokenizer (tiktoken / transformers).
-    """
-    words = text.split()
-    return [zlib.crc32(w.encode()) & 0x7FFF for w in words] or [1]
+    return get_tokenizer().encode(text)
 
 
 def _detokenize(token_ids: List[int]) -> str:
-    """
-    Dummy detokenizer: returns a placeholder string.
-    Production: replace with vocabulary lookup.
-    """
-    return f"[Astra response — {len(token_ids)} output tokens generated via P2P pipeline]"
+    tok = get_tokenizer()
+    if tok.is_stub:
+        return f"[Astra response — {len(token_ids)} output tokens (stub, no real model)]"
+    return tok.decode(token_ids)
 
 
 # ─────────────────────────────────────────────────────────────────────────── #
