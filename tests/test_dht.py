@@ -3,10 +3,8 @@
 
 """Tests for astra.network.dht."""
 
-import threading
 import time
 
-import pytest
 
 from astra.network.dht import AstraDHT, DHTNodeRecord, _GlobalStore
 

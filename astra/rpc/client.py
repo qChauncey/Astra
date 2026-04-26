@@ -34,10 +34,9 @@ from __future__ import annotations
 import logging
 import time
 import zlib
-from typing import Dict, Iterator, List, Optional
+from typing import Dict, Iterator, List
 
 import grpc
-import numpy as np
 
 from ..serialization.tensor_pack import TensorPacket, TensorSerializer
 from .generated import inference_pb2 as pb2

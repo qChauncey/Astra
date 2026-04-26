@@ -55,4 +55,4 @@ jobs:
         run: pip install ruff
 
       - name: Run ruff
-        run: ruff check astra/ scripts/ --select=E,F,W --ignore=E501
+        run: ruff check astra/ scripts/ tests/ --select=E,F,W --ignore=E501
