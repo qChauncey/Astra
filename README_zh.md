@@ -21,6 +21,20 @@
 
 ---
 
+## 平台支持
+
+| 功能模块 | Linux | macOS | Windows |
+|---------|:-----:|:-----:|:-------:|
+| numpy stub 推理（无需 GPU） | ✅ | ✅ | ✅ |
+| gRPC 流水线 | ✅ | ✅ | ✅ |
+| OpenAI API 网关 | ✅ | ✅ | ✅ |
+| `check_env.py` 环境检测 | ✅ | ✅ | ✅ |
+| KTransformers C++ 内核 | ✅ | ⚠️ 需自行编译 | ❌ |
+
+> **KTransformers**（Phase 4，可选）依赖 Linux + CUDA。numpy stub 模式无需 GPU，三平台均可运行。
+
+---
+
 ## 快速开始
 
 ```bash

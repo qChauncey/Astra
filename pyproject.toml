@@ -8,16 +8,16 @@ version = "0.1.0-alpha"
 description = "Distributed P2P inference framework for DeepSeek-V4 on commodity hardware"
 readme = "README.md"
 license = { text = "Apache-2.0" }
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 authors = [{ name = "Project Astra Contributors" }]
 keywords = ["LLM", "distributed-inference", "DeepSeek", "MoE", "P2P", "KTransformers"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "License :: OSI Approved :: Apache Software License",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
 dependencies = [
@@ -27,6 +27,7 @@ dependencies = [
     "fastapi>=0.110.0",
     "uvicorn[standard]>=0.27.0",
     "httpx>=0.26.0",
+    "psutil>=5.9.0",
 ]
 
 [project.optional-dependencies]

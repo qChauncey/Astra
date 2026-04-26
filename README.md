@@ -21,6 +21,20 @@
 
 ---
 
+## Platform Support
+
+| Component | Linux | macOS | Windows |
+|-----------|:-----:|:-----:|:-------:|
+| numpy stub (no GPU) | ✅ | ✅ | ✅ |
+| gRPC pipeline | ✅ | ✅ | ✅ |
+| OpenAI API gateway | ✅ | ✅ | ✅ |
+| `check_env.py` | ✅ | ✅ | ✅ |
+| KTransformers C++ kernel | ✅ | ⚠️ build from source | ❌ |
+
+> **KTransformers** (Phase 4, optional) requires Linux + CUDA. The numpy stub mode runs on all platforms without a GPU.
+
+---
+
 ## Quick Start
 
 ```bash
