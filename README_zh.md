@@ -200,6 +200,19 @@ docs/
 
 ---
 
+## 配套文档
+
+| 文档 | 内容 |
+|-----|-----|
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 系统设计、数据流、传输格式规范 |
+| [docs/ROADMAP.md](docs/ROADMAP.md) | 分阶段实施计划 |
+| [docs/TESTING.md](docs/TESTING.md) | 测试方案：已覆盖 70 项 + 待完成测试清单（含不可自动化的硬件测试项） |
+| [docs/SECURITY.md](docs/SECURITY.md) | 节点间加密（mTLS）、隐藏状态隐私保护、输出完整性验证、差分隐私 |
+| [docs/FEASIBILITY.md](docs/FEASIBILITY.md) | 算力门槛、地理微集群划分规则、带宽需求、与同类项目对比 |
+| [docs/COMPLIANCE.md](docs/COMPLIANCE.md) | 所有依赖库的许可证合规分析、DeepSeek 模型使用条款、专利条款 |
+
+---
+
 ## 实施路线图
 
 | 阶段 | 内容 | 状态 |
