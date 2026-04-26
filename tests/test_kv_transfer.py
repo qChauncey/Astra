@@ -21,7 +21,6 @@ test_pipeline_grpc.py.
 """
 
 import numpy as np
-import pytest
 
 from astra.inference.heterogeneous import DeviceMap, HeterogeneousEngine, LayerKVCache
 from astra.rpc.kv_transfer import (
@@ -123,7 +122,6 @@ class TestSplitArray:
 
     def test_chunks_reassemble(self):
         arr = np.arange(120, dtype=np.float32).reshape(10, 12)
-        rows_per_chunk = max(1, MAX_CHUNK_BYTES // arr[0].nbytes)
         chunks = list(_split_array(arr))
         reconstructed = np.concatenate([c for c, _ in chunks], axis=0)
         np.testing.assert_array_equal(arr, reconstructed)

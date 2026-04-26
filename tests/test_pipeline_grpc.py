@@ -10,7 +10,6 @@ the full pack → gRPC → compute → deserialize loop.
 
 import threading
 import time
-from typing import List
 
 import numpy as np
 import pytest

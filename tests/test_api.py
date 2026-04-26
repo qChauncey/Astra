@@ -215,8 +215,8 @@ def test_chat_stream_chunks_parseable(client):
     }
     resp = client.post("/v1/chat/completions", json=payload)
     data_lines = [
-        l for l in resp.text.strip().split("\n")
-        if l.startswith("data:") and "[DONE]" not in l
+        line for line in resp.text.strip().split("\n")
+        if line.startswith("data:") and "[DONE]" not in line
     ]
     assert len(data_lines) > 0
     for line in data_lines:

@@ -10,7 +10,6 @@ from astra.serialization.tensor_pack import (
     TensorPacket,
     TensorSerializer,
     DEEPSEEK_V4_HIDDEN_DIM,
-    DEEPSEEK_V4_TOP_K_EXPERTS,
 )
 
 
