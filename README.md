@@ -6,8 +6,9 @@
 </div>
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
-[![Python](https://img.shields.io/badge/python-3.9%2B-blue)](https://www.python.org)
+[![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org)
 [![Tests](https://img.shields.io/badge/tests-130%20passed-brightgreen)]()
+[![CI](https://github.com/qchauncey/astra/actions/workflows/ci.yml/badge.svg)](.github/workflows/ci.yml)
 [![Status](https://img.shields.io/badge/status-Phase%203%20in%20progress-yellow)]()
 
 **Astra** is an open-source P2P distributed inference framework that runs **DeepSeek-V4-Flash (284B)** across a cluster of commodity PCs (e.g., RTX 5070 Ti, 16 GB VRAM each) by combining:
@@ -34,8 +35,9 @@ python scripts/check_env.py
 python mock_pipeline.py --seq-len 32 --hidden-dim 256
 
 # 4. Start a node (with OpenAI-compatible API on port 8080)
+#    --hidden-dim 256  uses mock dimensions; omit for the real model (7168)
 python scripts/run_node.py --node-id node-A --port 50051 \
-    --layer-start 0 --layer-end 30 --api-port 8080
+    --layer-start 0 --layer-end 30 --hidden-dim 256 --api-port 8080
 ```
 
 ---
@@ -158,7 +160,8 @@ mock_pipeline.py                # Phase 1 & 2 local simulation harness
 scripts/
 ├── run_node.py                 # Production node launch CLI
 └── check_env.py                # Environment readiness checker
-tests/                          # 70 pytest tests (all passing)
+tests/                          # 130 pytest tests (all passing)
+.github/workflows/ci.yml        # CI: Python 3.10/3.11/3.12 matrix + lint
 docs/
 ├── ARCHITECTURE.md             # Detailed design & wire format spec
 └── ROADMAP.md                  # Phase-by-phase implementation plan
@@ -184,14 +187,14 @@ docs/
 
 ## Documentation
 
-| 文档 | 内容 |
-|-----|-----|
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 系统设计、数据流、传输格式规范 |
-| [docs/ROADMAP.md](docs/ROADMAP.md) | 分阶段实施计划（Phase 1 ✓ · Phase 2 ✓ · Phase 3 进行中） |
-| [docs/TESTING.md](docs/TESTING.md) | 测试方案：已覆盖 70 项 + 待完成测试清单 |
-| [docs/SECURITY.md](docs/SECURITY.md) | 加密方案、mTLS、差分隐私、输出防篡改 |
-| [docs/FEASIBILITY.md](docs/FEASIBILITY.md) | 算力门槛、地理微集群划分、带宽需求分析 |
-| [docs/COMPLIANCE.md](docs/COMPLIANCE.md) | 许可证合规、DeepSeek 模型条款、专利分析 |
+| Doc | Contents |
+|-----|----------|
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | System design, data flow, wire format spec |
+| [docs/ROADMAP.md](docs/ROADMAP.md) | Phase-by-phase plan (Phase 1 ✓ · Phase 2 ✓ · Phase 3 in progress) |
+| [docs/TESTING.md](docs/TESTING.md) | Test strategy: 130 tests covered + pending hardware test checklist |
+| [docs/SECURITY.md](docs/SECURITY.md) | mTLS encryption, differential privacy, output tamper-proofing |
+| [docs/FEASIBILITY.md](docs/FEASIBILITY.md) | Compute thresholds, geo micro-cluster tiers, bandwidth analysis |
+| [docs/COMPLIANCE.md](docs/COMPLIANCE.md) | License compliance, DeepSeek model terms, patent analysis |
 
 ---
 
