@@ -35,10 +35,8 @@ from __future__ import annotations
 import argparse
 import importlib
 import json
-import os
 import platform
 import shutil
-import struct
 import subprocess
 import sys
 from typing import Any, Dict, List, Tuple
@@ -54,8 +52,8 @@ def _check(label: str, fn, *args) -> Tuple[bool, str]:
 
 def check_python() -> Tuple[bool, str]:
     v = sys.version_info
-    ok = v >= (3, 9)
-    return ok, f"{v.major}.{v.minor}.{v.micro} {'✓' if ok else '✗ (need ≥3.9)'}"
+    ok = v >= (3, 10)
+    return ok, f"{v.major}.{v.minor}.{v.micro} {'✓' if ok else '✗ (need ≥3.10)'}"
 
 
 def check_package(name: str, attr: str = "__version__") -> Tuple[bool, str]:
@@ -115,38 +113,27 @@ def check_grpc() -> Tuple[bool, str]:
 
 def check_ram() -> Tuple[bool, str]:
     try:
-        import resource
-        soft, hard = resource.getrlimit(resource.RLIMIT_AS)
-    except Exception:
-        pass
-
-    # /proc/meminfo fallback
-    mem_gb = None
-    if os.path.exists("/proc/meminfo"):
-        with open("/proc/meminfo") as f:
-            for line in f:
-                if line.startswith("MemTotal:"):
-                    kb = int(line.split()[1])
-                    mem_gb = kb / 1024 / 1024
-                    break
-
-    if mem_gb is not None:
+        import psutil
+        mem = psutil.virtual_memory()
+        mem_gb = mem.total / 1024 ** 3
         ok = mem_gb >= 64.0
-        status = f"{mem_gb:.1f} GB {'✓' if ok else '✗ (≥64 GB recommended for 284B MoE weights)'}"
-        return ok, status
-    return True, "unknown (could not read /proc/meminfo)"
+        return ok, f"{mem_gb:.1f} GB total  ({mem.available / 1024 ** 3:.1f} GB available)  {'✓' if ok else '✗ (≥64 GB recommended for 284B MoE weights)'}"
+    except ImportError:
+        return True, "unknown (psutil not installed)"
 
 
 def check_nvme() -> Tuple[bool, str]:
-    """Check NVMe for potential weight mmap from disk."""
+    """Check disk space for potential weight mmap from disk."""
     try:
-        result = subprocess.run(
-            ["df", "-h", "/"], capture_output=True, text=True, timeout=5
-        )
-        lines = result.stdout.strip().splitlines()
-        if len(lines) >= 2:
-            return True, lines[1]
-        return True, "disk info unavailable"
+        import psutil
+        root = "C:\\" if platform.system() == "Windows" else "/"
+        usage = psutil.disk_usage(root)
+        total_tb = usage.total / 1024 ** 4
+        free_tb = usage.free / 1024 ** 4
+        ok = usage.free >= 1 * 1024 ** 3  # warn if less than 1 GB free
+        return ok, f"{root}  total={total_tb:.2f} TB  free={free_tb:.2f} TB"
+    except ImportError:
+        return True, "unknown (psutil not installed)"
     except Exception as exc:
         return True, f"(disk check skipped: {exc})"
 
@@ -181,8 +168,9 @@ def check_astra_import() -> Tuple[bool, str]:
 
 def run_checks() -> Dict[str, Any]:
     checks = [
-        ("Python ≥3.9",         check_python),
+        ("Python ≥3.10",        check_python),
         ("numpy",               lambda: check_package("numpy")),
+        ("psutil",              lambda: check_package("psutil")),
         ("grpcio",              check_grpc),
         ("fastapi",             lambda: check_package("fastapi")),
         ("httpx",               lambda: check_package("httpx")),
@@ -209,7 +197,7 @@ def print_report(results: Dict[str, Any]) -> None:
     WARN = "\033[93m WARN\033[0m"
 
     # Required vs optional
-    required = {"Python ≥3.9", "numpy", "grpcio", "astra package"}
+    required = {"Python ≥3.10", "numpy", "psutil", "grpcio", "astra package"}
     optional_critical = {"PyTorch + CUDA", "KTransformers C++"}
 
     print("\n" + "=" * 72)
@@ -266,7 +254,7 @@ def main() -> None:
     else:
         print_report(results)
 
-    required = {"Python ≥3.9", "numpy", "grpcio", "astra package"}
+    required = {"Python ≥3.10", "numpy", "psutil", "grpcio", "astra package"}
     if not all(results[k]["ok"] for k in required if k in results):
         sys.exit(1)
 

@@ -214,7 +214,8 @@ def main() -> None:
         stop_event.set()
 
     signal.signal(signal.SIGINT, _handle_signal)
-    signal.signal(signal.SIGTERM, _handle_signal)
+    if hasattr(signal, "SIGTERM"):  # SIGTERM is not available on Windows
+        signal.signal(signal.SIGTERM, _handle_signal)
 
     log.info("Node running. Press Ctrl-C to stop.")
     try:
