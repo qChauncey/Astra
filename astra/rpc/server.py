@@ -45,11 +45,10 @@ from concurrent import futures
 from typing import Iterator, List, Optional
 
 import grpc
-import numpy as np
 
 from ..inference.heterogeneous import DeviceMap, HeterogeneousEngine
 from ..inference.shared_expert_cache import ExpertWeights
-from ..serialization.tensor_pack import TensorPacket, TensorSerializer
+from ..serialization.tensor_pack import TensorSerializer
 from .generated import inference_pb2 as pb2
 from .generated import inference_pb2_grpc as pb2_grpc
 
