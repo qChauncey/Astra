@@ -48,8 +48,8 @@ import grpc
 
 import numpy as np
 
-from ..inference.batch_scheduler import BatchGroup, BatchRequest, ContinuousBatchScheduler
-from ..inference.batch_utils import BatchInfo, pad_sequences, unpad_output
+from ..inference.batch_scheduler import BatchGroup, ContinuousBatchScheduler
+from ..inference.batch_utils import unpad_output
 from ..inference.heterogeneous import DeviceMap, HeterogeneousEngine
 from ..inference.shared_expert_cache import ExpertWeights
 from ..serialization.tensor_pack import TensorSerializer

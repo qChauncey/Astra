@@ -35,7 +35,7 @@ import uuid
 from collections import deque
 from dataclasses import dataclass, field
 from enum import Enum, auto
-from typing import Any, Callable, Deque, Dict, List, Optional, Sequence, Tuple
+from typing import Any, Deque, Dict, List, Optional, Tuple
 
 import numpy as np
 

@@ -25,7 +25,6 @@ Tests for:
 from __future__ import annotations
 
 import time
-from typing import Dict, List, Tuple
 
 import numpy as np
 import pytest
@@ -35,16 +34,14 @@ from astra.routing.expert_telemetry import (
     HotSpot,
 )
 from astra.routing.cluster_affinity import (
-    AffinityGroup,
     ClusterAffinity,
     NodeProximity,
 )
 from astra.routing.geo_router import (
     GeoAwareMoERouter,
     GeoRegion,
-    REGIONS,
 )
-from astra.network.orchestrator import PipelineOrchestrator, PipelineRunResult, HopResult
+from astra.network.orchestrator import PipelineOrchestrator
 
 
 # ================================================================== #
@@ -344,7 +341,7 @@ class TestReplicaAwareRouting:
 
         # Simulate routing via dispatch_with_telemetry
         selected = np.array([[0, 5, 20]], dtype=np.int32)  # 1 token, 3 experts
-        plan = geo_router.dispatch_with_telemetry(selected, layer_idx=0)
+        geo_router.dispatch_with_telemetry(selected, layer_idx=0)
         assert telemetry.total_dispatches() >= 0  # shared expert 0 excluded
 
     def test_get_replica_target_empty_when_no_hotspots(self, geo_router: GeoAwareMoERouter, telemetry: ExpertTelemetry):
