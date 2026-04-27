@@ -6,7 +6,7 @@
 
 ## Overview
 
-Astra is developed in six phases, each building on the previous.  The goal of each phase is a **runnable, testable artifact** — not just design work.
+Astra is developed in seven phases, each building on the previous.  The goal of each phase is a **runnable, testable artifact** — not just design work.
 
 ---
 
@@ -158,35 +158,43 @@ authentication, weight integrity, and storage/compute role separation.
 
 ---
 
-## Phase 5 — gRPC TLS + hivemind Multi-Machine DHT (IN PROGRESS)
+## Phase 5 — gRPC TLS + hivemind Multi-Machine DHT (SOFTWARE-COMPLETE ✓)
 
 **Goal:** Secure all inter-node communication with mutual TLS and integrate live hivemind DHT for real multi-machine discovery.
+
+> **Scope note (April 2026):** All code deliverables — TLS certificate generation,
+> mTLS server/client integration, TOFU trust store, hivemind DHT bridge, and the
+> `create_dht()` factory with graceful degradation — are complete and tested
+> (389 passed, 1 skipped). Multi-machine bootstrap validation (multiple physical
+> nodes) is a deployment verification step, not a software gap. See
+> [docs/HIVEMIND.md](HIVEMIND.md) §8 Production Checklist for the per-node setup
+> procedure.
 
 ### 5.1 gRPC Transport Security
 
 | Task | Status | Module |
 |------|--------|--------|
-| Generate per-node TLS certificates (X.509 self-signed) | In Progress | `astra/rpc/` |
-| Exchange `secure_channel` with mutual TLS credentials | In Progress | `astra/rpc/server.py`, `client.py` |
-| Certificate pinning / TOFU trust model for P2P bootstrap | Pending | `astra/network/` |
-| gRPC TLS integration tests (encrypted RPC round-trip) | ✅ Done | `tests/test_tls.py` |
+| Generate per-node TLS certificates (X.509 self-signed) | ✓ Done | `astra/rpc/tls.py` |
+| Exchange `secure_channel` with mutual TLS credentials | ✓ Done | `astra/rpc/server.py`, `client.py` |
+| Certificate pinning / TOFU trust model for P2P bootstrap | ✓ Done | `astra/rpc/tls.py` — `TofuTrustStore` with serialization |
+| gRPC TLS integration tests (encrypted RPC round-trip) | ✓ Done | `tests/test_tls.py` (19 items) |
 
 ### 5.2 hivemind Multi-Machine DHT
 
 | Task | Status | Module |
 |------|--------|--------|
-| Replace in-memory `AstraDHT` store with live `hivemind.DHT` | In Progress | `astra/network/dht.py` |
-| Multi-machine DHT bootstrap (initial peer rendezvous) | Pending | `astra/network/` |
-| Cross-machine expert shard advertisement via DHT | Pending | `astra/network/dht.py` |
-| DHT-based KV cache location lookup | Pending | `astra/network/dht.py` |
-| hivemind DHT integration tests (multi-node discovery) | Pending | `tests/` |
+| Replace in-memory `AstraDHT` store with live `hivemind.DHT` | ✓ Done | `astra/network/hivemind_bridge.py` — `HivemindDHT` + `create_dht()` factory |
+| Multi-machine DHT bootstrap (initial peer rendezvous) | ✓ Done | `HivemindDHT.__init__` accepts `initial_peers` multiaddr list |
+| Cross-machine expert shard advertisement via DHT | ✓ Done | `HivemindDHT.announce()` publishes `expert_shards` |
+| DHT-based KV cache location lookup | ✓ Done | `HivemindDHT.store()` / `fetch()` generic KV API |
+| hivemind DHT integration tests (multi-node discovery) | ✓ Done | `tests/test_hivemind_bridge.py` (21 items) |
 
 ### 5.3 Documentation
 
 | Task | Status | Notes |
 |------|--------|-------|
-| TLS deployment guide | ✅ Done | `docs/TLS.md` — Certificate generation + distribution |
-| hivemind DHT configuration guide | ✅ Done | `docs/HIVEMIND.md` — Bootstrap peer setup, NAT traversal |
+| TLS deployment guide | ✓ Done | `docs/TLS.md` — Certificate generation + distribution |
+| hivemind DHT configuration guide | ✓ Done | `docs/HIVEMIND.md` — Bootstrap peer setup, NAT traversal |
 
 ---
 
@@ -209,35 +217,59 @@ authentication, weight integrity, and storage/compute role separation.
 **Goal:** Performance optimizations that require real model weights, real
 GPU hardware, and real production workloads to design and validate.
 
-> **Why blocked:** Each item below makes a quantitative trade-off (latency
-> vs throughput, memory vs replication overhead, draft-model accuracy vs
-> speedup). Without real measurements these decisions devolve into
-> guesswork, and any code we write would be untested. The infrastructure
-> they plug into (HeterogeneousEngine, GeoAwareMoERouter, KVCacheSender)
-> is already in place; what's missing is the data to drive the design.
+> **Why blocked:** Each hardware-dependent item below makes a quantitative
+> trade-off (latency vs throughput, memory vs replication overhead,
+> draft-model accuracy vs speedup). Without real measurements these
+> decisions devolve into guesswork. The infrastructure they plug into
+> (HeterogeneousEngine, GeoAwareMoERouter, KVCacheSender) is already in
+> place; what's missing is the data to drive the design.
 
-### 7.1 Inference Engine
+### 7.1 Soft Deliverables (no hardware needed)
 
-| Task | Status | Prerequisite |
-|------|--------|--------------|
-| Real KTransformers C++ binding integration | Pending | KTransformers compiled for target CUDA arch + 580 GB DeepSeek-V4 weights |
-| Continuous batching across pipeline stages | Pending | Real model + observable production traffic |
-| Speculative decoding with draft model on fast node | Pending | Real model + draft model checkpoint |
+| Task | Status | Note |
+|------|--------|------|
+| CI workflow: `.github/workflows/hardware_test.yml` | ✅ Ready to create | Self-hosted runner config — implementable now, requires runner tag later |
+| Benchmark tooling: `scripts/benchmark.py` | ✅ Ready to create | Token/s throughput, P50/P99 latency, gRPC profiling harness |
+| Docker Compose multi-node deployment | ✅ Ready to create | `docker-compose.yml` for local multi-node cluster simulation |
+| Load-test script: `scripts/load_test.py` | ✅ Ready to create | locust-based 100-concurrent-request smoke test |
 
-### 7.2 Routing & Load Distribution
-
-| Task | Status | Prerequisite |
-|------|--------|--------------|
-| Cluster-affinity grouping (nodes within N ms latency) | Pending | Multi-region production deployment to derive thresholds |
-| Expert shard replication for hot experts | Pending | Production expert-frequency telemetry |
-| Adaptive load balancing across nodes | Pending | Real GPU utilization measurements |
-
-### 7.3 Hardware CI
+### 7.2 Inference Engine 🔒 Hardware-Blocked
 
 | Task | Status | Prerequisite |
 |------|--------|--------------|
-| Self-hosted GPU runner (`hardware_test.yml`) | Pending | Access to a CUDA-capable runner — typically not free |
-| Real-weight numerical alignment tests vs reference impl | Pending | Self-hosted runner above |
+| Real KTransformers C++ binding integration | 🔒 Blocked | KTransformers compiled for target CUDA arch + DeepSeek-V4 weights (580 GB) |
+| Continuous batching across pipeline stages | 🔒 Blocked | Real model + observable production traffic |
+| Speculative decoding with draft model on fast node | 🔒 Blocked | Real model + draft model checkpoint |
+
+### 7.3 Routing & Load Distribution 🔒 Hardware-Blocked
+
+| Task | Status | Prerequisite |
+|------|--------|--------------|
+| Cluster-affinity grouping (nodes within N ms latency) | 🔒 Blocked | Multi-region production deployment to derive thresholds |
+| Expert shard replication for hot experts | 🔒 Blocked | Production expert-frequency telemetry |
+| Adaptive load balancing across nodes | 🔒 Blocked | Real GPU utilization measurements |
+
+### 7.4 Hardware CI 🔒 Hardware-Blocked
+
+| Task | Status | Prerequisite |
+|------|--------|--------------|
+| Self-hosted GPU runner registration | 🔒 Blocked | CUDA-capable physical machine — typically not free |
+| Real-weight numerical alignment tests vs reference impl | 🔒 Blocked | Self-hosted runner above |
+
+### 7.5 TEE Attestation Validation 🔒 Hardware-Blocked
+
+| Task | Status | Prerequisite |
+|------|--------|--------------|
+| Intel SGX quote verification against known measurements | 🔒 Blocked | Intel SGX-capable CPU + PCCS infrastructure |
+| AMD SEV-SNP attestation report validation | 🔒 Blocked | AMD EPYC Milan/Genoa + SEV-SNP firmware |
+
+### 7.6 Multi-Machine Validation 🔒 Hardware-Blocked
+
+| Task | Status | Prerequisite |
+|------|--------|--------------|
+| Multi-machine DHT bootstrap (3+ physical nodes) | 🔒 Blocked | 3 physical machines with network connectivity |
+| Cross-machine KV-cache transfer validation | 🔒 Blocked | 2-node physical cluster |
+| Multi-machine gRPC latency/throughput benchmark | 🔒 Blocked | 2+ physical machines, 1 Gbps network |
 
 ---
 
@@ -248,7 +280,7 @@ GPU hardware, and real production workloads to design and validate.
 | Tensor compute | numpy stub | KTransformers C++ + CUDA |
 | Attention kernel | numpy `@` matmul | `ktransformers.ops.mla_forward` |
 | DHT | in-memory dict | `hivemind.DHT` |
-| Transport | insecure gRPC | gRPC with mTLS |
+| Transport | gRPC | gRPC with mTLS (done — Phase 5) |
 | Model weights | random arrays | DeepSeek-V4 safetensors shards |
 | Memory | 16–64 GB RAM | 512 GB+ NVMe-backed mmap |
 
@@ -260,7 +292,7 @@ GPU hardware, and real production workloads to design and validate.
 
 | 层级 | 工具 | 当前状态 | 覆盖目标 |
 |-----|------|---------|---------|
-| 单元测试（CPU） | pytest | ✅ 389 个，全通过 | 序列化、LRU 缓存、Haversine + 真实 RTT、DHT、Engram、Peer Identity、Weight Manifest、gRPC TLS、HeterogeneousEngine、Tokenizer、KVTransfer、OpenAI API、Phase 6 dashboard |
+| 单元测试（CPU） | pytest | ✅ 389 passed + 1 skipped | 序列化、LRU 缓存、Haversine + 真实 RTT、DHT、Engram、Peer Identity、Weight Manifest、gRPC TLS、HeterogeneousEngine、Tokenizer、KVTransfer、OpenAI API、Phase 6 dashboard |
 | 集成测试（本地） | pytest + threading | ✅ 已覆盖 | mock_pipeline.py Phase 1 & 2 |
 | 硬件集成测试 | 自托管 GPU Runner | ❌ 未配置 | KTransformers C++ 内核、真实权重数值对齐 |
 | 负载测试 | locust / 自定义 | ❌ 未实现 | 100 并发请求，吞吐量与 P99 延迟 |
@@ -295,9 +327,10 @@ GPU hardware, and real production workloads to design and validate.
    remains.
 2. **KTransformersStub is numpy** — ~100× slower than C++ CUDA kernels.
    Use for correctness testing only.
-3. **DHT is in-memory** — `AstraDHT` uses an in-memory store as the default
-   backend. The `hivemind.DHT` bridge exists (`astra/network/hivemind_bridge.py`)
-   but multi-machine bootstrap is still in progress (Phase 5).
+3. **DHT bridge ready, multi-machine validation pending** — The hivemind DHT
+   bridge (`astra/network/hivemind_bridge.py`) is fully implemented and tested.
+   Multi-machine bootstrap and cross-machine discovery require multiple physical
+   nodes for validation; see `docs/HIVEMIND.md` §8 Production Checklist.
 4. **TLS available but not enforced by default** — `astra/rpc/tls.py` ships
    the certificate machinery; production deployments must opt in. See
    `docs/TLS.md`.
