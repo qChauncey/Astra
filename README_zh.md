@@ -7,7 +7,7 @@
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org)
-[![Tests](https://img.shields.io/badge/tests-299%20passed-brightgreen)]()
+[![Tests](https://img.shields.io/badge/tests-322%20passed-brightgreen)]()
 [![CI](https://github.com/qchauncey/astra/actions/workflows/ci.yml/badge.svg)](.github/workflows/ci.yml)
 [![Status](https://img.shields.io/badge/状态-Phase%204--6%20已完成%2C%20Phase%205%20进行中-blue)]()
 
@@ -47,6 +47,20 @@
 
 ---
 
+## 一键安装（Windows）
+
+Windows 用户无需命令行，可直接图形化安装：
+
+1. 克隆或下载本仓库
+2. 双击 **`installer\install.bat`**（或在 PowerShell 中运行 `installer\install.ps1`）
+3. 安装完成后，双击 **`installer\start.bat`** 启动
+
+启动后自动进入**离线模式**（单机，所有层本地运行），并在浏览器打开 `http://localhost:8080` 的 Web 界面。
+
+> **注意：** 当前版本使用 numpy 推理存根——响应内容为占位符文本。真实 AI 输出需要 GPU + 模型权重（Phase 4）。
+
+---
+
 ## 快速开始
 
 跳转到对应平台：
@@ -63,15 +77,16 @@
 # 1. 克隆并安装
 git clone https://github.com/qchauncey/astra.git && cd astra
 pip install -e ".[proto]"
+pip install uvicorn   # Web UI 所需
 
 # 2. 检查运行环境
 python scripts/check_env.py
 
-# 3. 运行 Mock 流水线（无需 GPU）
-python mock_pipeline.py --seq-len 32 --hidden-dim 256
+# 3. 离线模式 — 单机运行全部层，Web UI 在 8080 端口
+#    打开 http://localhost:8080 即可看到类 Claude 的聊天界面
+python scripts/run_node.py --mode offline --api-port 8080
 
-# 4. 启动节点（同时开启 OpenAI 兼容 API，端口 8080）
-#    --hidden-dim 256 使用 mock 维度；真实模型省略此参数（默认 7168）
+# 4. P2P 模式 — 向集群贡献指定层
 python scripts/run_node.py --node-id node-A --port 50051 \
     --layer-start 0 --layer-end 30 --hidden-dim 256 --api-port 8080
 
@@ -80,12 +95,11 @@ python scripts/run_node.py --node-id node-A --port 50051 \
     --layer-start 0 --layer-end 30 --gpu --api-port 8080
 
 # 6. 单机多节点集群（无需真实 GPU，验证完整 P2P pipeline 基础设施）
-#    在进程内以不同端口启动 N 个节点，通过 gRPC 串联后跑端到端验证
 python scripts/run_cluster.py --nodes 3 --hidden-dim 256 --validate-only
-
-#    保持集群运行 + 开启 OpenAI API 网关，用于手动测试
 python scripts/run_cluster.py --nodes 3 --hidden-dim 256 --api-port 8080
 ```
+
+> **存根说明：** 当前所有推理输出均为 numpy 随机数组。Web UI、流式输出、节点发现、gRPC 流水线均已完整实现——仅缺少模型权重（Phase 4）。
 
 ---
 
@@ -120,6 +134,13 @@ python scripts/run_node.py --node-id dht-node --port 50051
 无 GPU 的 Windows 节点**无法向集群贡献推理算力**，可用角色：API 网关、DHT 发现节点、开发与测试。  
 要贡献真实算力，请使用 [WSL2 + CUDA](#windows--gpu-推理via-wsl2)。
 
+**方式 A — 一键安装（推荐）**
+
+1. 克隆本仓库，双击 `installer\install.bat`
+2. 双击 `installer\start.bat` — 以离线模式启动并打开 Web 界面
+
+**方式 B — 手动**
+
 ```powershell
 # 安装 Python 3.10+：https://python.org（勾选"Add to PATH"）
 # 安装 Git：https://git-scm.com
@@ -127,10 +148,13 @@ python scripts/run_node.py --node-id dht-node --port 50051
 git clone https://github.com/qchauncey/astra.git
 cd astra
 pip install -e ".[proto]"
+pip install uvicorn
 
-# 环境检查与本地测试
+# 环境检查
 python scripts/check_env.py
-python mock_pipeline.py --seq-len 32 --hidden-dim 256
+
+# 离线模式 — 单机运行全部层，Web UI 在 8080 端口
+python scripts/run_node.py --mode offline --api-port 8080
 
 # 角色一：API 网关 — 接收用户 HTTP 请求，转发至集群中的 GPU 节点
 python scripts/run_node.py --node-id gateway --port 50051 --api-port 8080
@@ -342,16 +366,21 @@ astra/
 │   ├── dht.py                  # AstraDHT（hivemind 兼容节点发现）
 │   └── orchestrator.py         # PipelineOrchestrator（N 节点 DHT 动态串联）
 └── api/
-    ├── openai_compat.py        # OpenAI 兼容 FastAPI 接口
+    ├── openai_compat.py        # OpenAI 兼容 FastAPI 接口 + Web UI 静态文件服务
     └── static/
-        └── index.html           # Phase 6 SPA 仪表盘（聊天、监控、身份、收益）
+        └── index.html          # Phase 6 SPA 仪表盘（聊天、监控、身份、收益）
 
 mock_pipeline.py                # 阶段 1 & 2 本地模拟测试入口
 scripts/
-├── run_node.py                 # 生产节点启动 CLI
-├── run_cluster.py              # 单机多节点集群启动器（Phase 3 基础设施验证）
+├── run_node.py                 # 节点启动 CLI（--mode offline|p2p）
+├── run_cluster.py              # 单机多节点集群启动器
 └── check_env.py                # 环境依赖检查工具（含节点角色资格输出）
-tests/                          # 299 个 pytest 测试（全部通过）
+installer/
+├── install.sh                  # Linux/macOS 一键安装脚本
+├── install.bat                 # Windows CMD 安装器（双击运行）
+├── install.ps1                 # Windows PowerShell 安装器
+└── start.bat                   # Windows 一键启动（离线模式 + 自动打开浏览器）
+tests/                          # 322 个 pytest 测试（全部通过）
 .github/workflows/ci.yml        # CI：Python 3.10/3.11/3.12 矩阵 + lint
 docs/
 ├── ARCHITECTURE.md             # 详细系统设计与传输格式规范
@@ -375,7 +404,8 @@ docs/
 | `astra.rpc.KVCacheSender/Receiver` | KV 张量分块流式传输（≤3 MB/块） |
 | `astra.network.AstraDHT` | 节点发现，可无缝替换为 `hivemind.DHT` |
 | `astra.network.PipelineOrchestrator` | DHT 发现 → 层覆盖校验 → 重试安全的 N 跳串联 |
-| `astra.api.openai_compat` | OpenAI `/v1/chat/completions` + SSE 流式接口 |
+| `astra.api.openai_compat` | OpenAI `/v1/chat/completions` + SSE 流式接口 + Web UI 服务 |
+| `astra.api.static/index.html` | Web UI：类 Claude 聊天 + 节点侧边栏（层占比 + 延迟指示） |
 
 ---
 
@@ -385,7 +415,7 @@ docs/
 |-----|-----|
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 系统设计、数据流、传输格式规范 |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | 分阶段实施计划 |
-| [docs/TESTING.md](docs/TESTING.md) | 测试方案：已覆盖 299 项 + 待完成测试清单（含不可自动化的硬件测试项） |
+| [docs/TESTING.md](docs/TESTING.md) | 测试方案：已覆盖 322 项 + 待完成测试清单（含不可自动化的硬件测试项） |
 | [docs/SECURITY.md](docs/SECURITY.md) | 节点间加密（mTLS）、隐藏状态隐私保护、输出完整性验证、差分隐私 |
 | [docs/TEE.md](docs/TEE.md) | TEE 部署指南：Intel SGX（Gramine）与 AMD SEV-SNP 远程证明流程 |
 | [docs/FEASIBILITY.md](docs/FEASIBILITY.md) | 算力门槛、地理微集群划分规则、带宽需求、与同类项目对比 |

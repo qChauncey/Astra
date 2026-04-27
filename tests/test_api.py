@@ -49,8 +49,9 @@ class TestTokenize:
         assert _tokenize("apple") != _tokenize("banana")
 
     def test_ids_in_valid_range(self):
+        from astra.inference.tokenizer import _STUB_VOCAB_SIZE
         for i in _tokenize("the quick brown fox jumps"):
-            assert 0 <= i <= 0x7FFF
+            assert 0 <= i < _STUB_VOCAB_SIZE
 
     def test_whitespace_only_returns_sentinel(self):
         assert _tokenize("   ") == [1]

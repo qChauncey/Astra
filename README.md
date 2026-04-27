@@ -7,7 +7,7 @@
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org)
-[![Tests](https://img.shields.io/badge/tests-299%20passed-brightgreen)]()
+[![Tests](https://img.shields.io/badge/tests-322%20passed-brightgreen)]()
 [![CI](https://github.com/qchauncey/astra/actions/workflows/ci.yml/badge.svg)](.github/workflows/ci.yml)
 [![Status](https://img.shields.io/badge/status-Phase%204--6%20complete%2C%20Phase%205%20in%20progress-blue)]()
 
@@ -47,6 +47,20 @@
 
 ---
 
+## One-Click Install (Windows)
+
+For Windows users who just want to try Astra without using the command line:
+
+1. Clone or download this repository
+2. Double-click **`installer\install.bat`** (or run `installer\install.ps1` in PowerShell)
+3. Once installed, double-click **`installer\start.bat`** to launch
+
+The launcher starts Astra in **offline mode** (single-machine, all layers local) and opens the web UI at `http://localhost:8080` automatically.
+
+> **Note:** The current version uses a numpy inference stub — responses are placeholder text. Real AI output requires GPU + model weights (Phase 4).
+
+---
+
 ## Quick Start
 
 Jump to your platform:
@@ -63,15 +77,16 @@ Jump to your platform:
 # 1. Clone and install
 git clone https://github.com/qchauncey/astra.git && cd astra
 pip install -e ".[proto]"
+pip install uvicorn   # needed for the web UI
 
 # 2. Check your environment
 python scripts/check_env.py
 
-# 3. Run the mock pipeline (no GPU required)
-python mock_pipeline.py --seq-len 32 --hidden-dim 256
+# 3. Offline mode — single machine, all layers local, web UI on port 8080
+#    Opens a Claude-like chat interface at http://localhost:8080
+python scripts/run_node.py --mode offline --api-port 8080
 
-# 4. Start a node (OpenAI-compatible API on port 8080)
-#    --hidden-dim 256 uses mock dimensions; omit for the real model (7168)
+# 4. P2P mode — contribute a layer slice to a shared cluster
 python scripts/run_node.py --node-id node-A --port 50051 \
     --layer-start 0 --layer-end 30 --hidden-dim 256 --api-port 8080
 
@@ -80,12 +95,11 @@ python scripts/run_node.py --node-id node-A --port 50051 \
     --layer-start 0 --layer-end 30 --gpu --api-port 8080
 
 # 6. Single-machine multi-node cluster (validates full P2P pipeline without real GPU)
-#    Spawns N nodes in-process on separate ports, chains them via gRPC, runs end-to-end
 python scripts/run_cluster.py --nodes 3 --hidden-dim 256 --validate-only
-
-#    Keep cluster running + OpenAI API gateway for manual testing
 python scripts/run_cluster.py --nodes 3 --hidden-dim 256 --api-port 8080
 ```
+
+> **Stub disclaimer:** All inference output is currently random numpy arrays. The web UI, streaming, peer discovery, and gRPC pipeline are fully functional — only the model weights are absent (Phase 4).
 
 ---
 
@@ -120,6 +134,13 @@ python scripts/run_node.py --node-id dht-node --port 50051
 Without a GPU, a Windows node **cannot contribute inference compute**. Valid roles: API Gateway, DHT discovery node, development and testing.  
 To contribute real compute, use [WSL2 + CUDA](#windows--gpu-inference-via-wsl2).
 
+**Option A — One-click installer (recommended)**
+
+1. Clone this repo and double-click `installer\install.bat`
+2. Double-click `installer\start.bat` — launches offline mode with the web UI
+
+**Option B — Manual**
+
 ```powershell
 # Install Python 3.10+ from https://python.org (check "Add to PATH")
 # Install Git from https://git-scm.com
@@ -127,10 +148,13 @@ To contribute real compute, use [WSL2 + CUDA](#windows--gpu-inference-via-wsl2).
 git clone https://github.com/qchauncey/astra.git
 cd astra
 pip install -e ".[proto]"
+pip install uvicorn
 
-# Environment check and local testing
+# Environment check
 python scripts/check_env.py
-python mock_pipeline.py --seq-len 32 --hidden-dim 256
+
+# Offline mode — single machine, all layers local, web UI on port 8080
+python scripts/run_node.py --mode offline --api-port 8080
 
 # Role 1: API Gateway — receives user HTTP requests, routes to GPU peers in the cluster
 python scripts/run_node.py --node-id gateway --port 50051 --api-port 8080
@@ -324,16 +348,21 @@ astra/
 │   ├── dht.py                  # AstraDHT — hivemind drop-in peer discovery
 │   └── orchestrator.py         # PipelineOrchestrator — N-node DHT chaining
 └── api/
-    ├── openai_compat.py        # OpenAI-compatible FastAPI endpoint
+    ├── openai_compat.py        # OpenAI-compatible FastAPI endpoint + web UI serving
     └── static/
-        └── index.html           # Phase 6 SPA dashboard (Chat, Monitor, Login, Earnings)
+        └── index.html          # Phase 6 SPA dashboard (Chat, Monitor, Login, Earnings)
 
 mock_pipeline.py                # Phase 1 & 2 local simulation harness
 scripts/
-├── run_node.py                 # Production node launch CLI
+├── run_node.py                 # Node launch CLI (--mode offline|p2p)
 ├── run_cluster.py              # Single-machine multi-node cluster launcher (Phase 3 validation)
 └── check_env.py                # Environment readiness checker (prints node role eligibility)
-tests/                          # 299 pytest tests (all passing)
+installer/
+├── install.sh                  # Linux/macOS one-command installer
+├── install.bat                 # Windows CMD installer (double-click)
+├── install.ps1                 # Windows PowerShell installer
+└── start.bat                   # Windows one-click launcher (offline mode + browser)
+tests/                          # 322 pytest tests (all passing)
 .github/workflows/ci.yml        # CI: Python 3.10/3.11/3.12 matrix + lint
 docs/
 ├── ARCHITECTURE.md             # Detailed design & wire format spec
@@ -357,7 +386,8 @@ docs/
 | `astra.rpc.KVCacheSender/Receiver` | Chunked KV tensor streaming between pipeline stages |
 | `astra.network.AstraDHT` | Peer discovery; drop-in for `hivemind.DHT` |
 | `astra.network.PipelineOrchestrator` | DHT → layer coverage → retry-safe N-hop chaining |
-| `astra.api.openai_compat` | OpenAI `/v1/chat/completions` + SSE streaming |
+| `astra.api.openai_compat` | OpenAI `/v1/chat/completions` + SSE streaming + web UI serving |
+| `astra.api.static/index.html` | Web UI: Claude-like chat + sidebar peer panel with layer bars and latency |
 
 ---
 
@@ -367,7 +397,7 @@ docs/
 |-----|----------|
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | System design, data flow, wire format spec |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | Phase-by-phase plan (Phase 1 ✓ · Phase 2 ✓ · Phase 3 in progress) |
-| [docs/TESTING.md](docs/TESTING.md) | Test strategy: 299 tests covered + pending hardware test checklist |
+| [docs/TESTING.md](docs/TESTING.md) | Test strategy: 322 tests covered + pending hardware test checklist |
 | [docs/SECURITY.md](docs/SECURITY.md) | mTLS encryption, differential privacy, output tamper-proofing |
 | [docs/TEE.md](docs/TEE.md) | TEE deployment guide: Intel SGX (Gramine) & AMD SEV-SNP attestation flow |
 | [docs/FEASIBILITY.md](docs/FEASIBILITY.md) | Compute thresholds, geo micro-cluster tiers, bandwidth analysis |
