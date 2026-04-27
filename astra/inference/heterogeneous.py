@@ -62,6 +62,54 @@ from .shared_expert_cache import ExpertWeights, SharedExpertCache
 
 
 # ------------------------------------------------------------------ #
+# MLA weight container                                                   #
+# ------------------------------------------------------------------ #
+
+@dataclass
+class MLAWeights:
+    """
+    DeepSeek-V3 / V4 Multi-head Latent Attention weight matrices.
+
+    MLA compresses KV cache via low-rank projections instead of storing
+    full K/V per head.  Tensor shapes are for DeepSeek-V4-Flash:
+
+    q_a_proj:  (q_lora_rank, hidden_dim)          = (1536, 7168)
+    q_b_proj:  (num_heads * head_dim, q_lora_rank) = (24576, 1536)
+    kv_a_proj: (kv_lora_rank + qk_rope_head_dim, hidden_dim) = (576, 7168)
+    kv_b_proj: (num_heads * (qk_nope_head_dim + v_head_dim), kv_lora_rank)
+               = (32768, 512)
+    o_proj:    (hidden_dim, num_heads * v_head_dim) = (7168, 16384)
+    q_norm:    (q_lora_rank,)                      = (1536,)
+    kv_norm:   (kv_lora_rank,)                     = (512,)
+    attn_norm: (hidden_dim,)                       = (7168,)
+    """
+
+    layer_idx: int
+    q_a_proj: np.ndarray
+    q_b_proj: np.ndarray
+    kv_a_proj: np.ndarray
+    kv_b_proj: np.ndarray
+    o_proj: np.ndarray
+    q_norm: np.ndarray
+    kv_norm: np.ndarray
+    attn_norm: np.ndarray
+    # Derived dimensions (set on first use)
+    num_heads: int = 128
+    head_dim: int = 192
+    qk_nope_head_dim: int = 128
+    qk_rope_head_dim: int = 64
+    v_head_dim: int = 128
+
+    @property
+    def q_lora_rank(self) -> int:
+        return self.q_a_proj.shape[0]
+
+    @property
+    def kv_lora_rank(self) -> int:
+        return self.kv_norm.shape[0]
+
+
+# ------------------------------------------------------------------ #
 # KTransformers backend shim                                            #
 # ------------------------------------------------------------------ #
 
@@ -445,6 +493,10 @@ class HeterogeneousEngine:
         self._attn_o_proj: Dict[int, np.ndarray] = {}
         self._norm_weights: Dict[int, np.ndarray] = {}
 
+        # MLA (Multi-head Latent Attention) weight store — Phase 4
+        self._mla_weights: Dict[int, MLAWeights] = {}
+        self._mla_mode: bool = False
+
     @classmethod
     def from_device_map(cls, dmap: DeviceMap) -> "HeterogeneousEngine":
         return cls(device_map=dmap)
@@ -461,6 +513,16 @@ class HeterogeneousEngine:
     def load_expert(self, ew: ExpertWeights) -> None:
         """Page a routed expert into cache (evicts LRU if full)."""
         self._expert_cache.load(ew.expert_id, ew)
+
+    def load_mla_weights(self, weights: List[MLAWeights]) -> None:
+        """Register MLA weight matrices for each layer and activate MLA mode."""
+        for mw in weights:
+            self._mla_weights[mw.layer_idx] = mw
+        self._mla_mode = True
+
+    def enable_mla_mode(self) -> None:
+        """Activate MLA attention path (called by WeightLoader after loading MLA weights)."""
+        self._mla_mode = True
 
     def _get_attn_weights(self, layer_idx: int) -> tuple:
         """Lazily initialise mock attention projection weights."""
@@ -503,6 +565,11 @@ class HeterogeneousEngine:
 
         Includes performance tracking for GPU utilisation metrics.
         """
+        if self._mla_mode and layer_idx in self._mla_weights:
+            return self._mla_attention_forward(
+                hidden, layer_idx, position_ids, use_kv_cache
+            )
+
         q_w, k_w, v_w, o_w, norm_w = self._get_attn_weights(layer_idx)
 
         normed = self._kt.rms_layer_norm(hidden, norm_w)
@@ -547,6 +614,89 @@ class HeterogeneousEngine:
         self._gpu_kernel_count += 1
 
         return (hidden.astype(np.float32) + out).astype(hidden.dtype)  # residual
+
+    def _mla_attention_forward(
+        self,
+        hidden: np.ndarray,
+        layer_idx: int,
+        position_ids: Optional[np.ndarray] = None,
+        use_kv_cache: bool = True,
+    ) -> np.ndarray:
+        """
+        MLA attention sub-layer using low-rank latent projections.
+
+        DeepSeek-V4 MLA compresses KV cache via:
+          Q  = q_b_proj @ RMSNorm(q_a_proj @ h)
+          KV = kv_b_proj @ RMSNorm(kv_a_proj @ h)
+
+        RoPE is applied only to the rope-dimension slices of Q and K.
+        """
+        mw = self._mla_weights[layer_idx]
+        seq_len = hidden.shape[0]
+
+        # --- Q path: low-rank compression ---
+        q_a = self._kt.matrix_multiply(hidden, mw.q_a_proj.T)
+        q_a = self._kt.rms_layer_norm(q_a, mw.q_norm)
+        q = self._kt.matrix_multiply(q_a, mw.q_b_proj.T)  # (seq, n_heads*head_dim)
+
+        # --- KV path: split latent from rope, project latent ---
+        kv_a = self._kt.matrix_multiply(hidden, mw.kv_a_proj.T)
+        kv_latent = kv_a[:, : mw.kv_lora_rank]
+        k_rope_raw = kv_a[:, mw.kv_lora_rank :]
+        kv_latent = self._kt.rms_layer_norm(kv_latent, mw.kv_norm)
+        kv = self._kt.matrix_multiply(kv_latent, mw.kv_b_proj.T)
+
+        # Split KV into k_nope and v
+        k_nope_dim = mw.num_heads * mw.qk_nope_head_dim
+        k_nope = kv[:, :k_nope_dim]
+        v = kv[:, k_nope_dim:]
+
+        # --- RoPE on rope-only slices ---
+        if position_ids is None:
+            position_ids = np.arange(seq_len)
+        q_nope_dim = mw.num_heads * mw.qk_nope_head_dim
+        q_nope = q[:, :q_nope_dim]
+        q_rope = q[:, q_nope_dim:]
+
+        q_rope = self._kt.rope_embedding(q_rope.astype(np.float16), position_ids)
+        k_rope = self._kt.rope_embedding(k_rope_raw.astype(np.float16), position_ids)
+
+        # --- Assemble full Q, K ---
+        q_full = np.concatenate([q_nope, q_rope], axis=-1)
+        k_full_raw = np.concatenate([k_nope, k_rope], axis=-1)
+
+        # --- KV cache ---
+        if use_kv_cache:
+            cache = self._kv_cache.setdefault(layer_idx, LayerKVCache())
+            cache.append(k_full_raw.astype(np.float32), v)
+            k_full = cache.k.astype(np.float16)
+            v_full = cache.v
+        else:
+            k_full, v_full = k_full_raw, v
+
+        # --- Scaled dot-product attention ---
+        attn_out = self._kt.multi_latent_attention(
+            q_full[np.newaxis],
+            k_full[np.newaxis],
+            v_full[np.newaxis],
+            head_dim=mw.head_dim,
+        )[0]
+
+        # --- Output projection ---
+        out = self._kt.matrix_multiply(
+            attn_out.astype(np.float32), mw.o_proj.T.astype(np.float32)
+        )
+
+        # Track GPU flops for utilisation monitoring
+        d = int(mw.attn_norm.shape[0])
+        self._gpu_flops_total += (
+            d * d * seq_len * 2       # low-rank + output projections
+            + d * seq_len * seq_len    # attention scores
+            + d * d * seq_len * 1      # output projection
+        )
+        self._gpu_kernel_count += 1
+
+        return (hidden.astype(np.float32) + out).astype(hidden.dtype)
 
     def _moe_forward(
         self,
