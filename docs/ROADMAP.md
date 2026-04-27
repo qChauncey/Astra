@@ -212,64 +212,93 @@ authentication, weight integrity, and storage/compute role separation.
 
 ---
 
-## Phase 7 — Inference Performance Tuning (BLOCKED ON HARDWARE)
+## Phase 7 — Inference Performance Tuning (IN PROGRESS)
 
-**Goal:** Performance optimizations that require real model weights, real
-GPU hardware, and real production workloads to design and validate.
+**Goal:** Connect the numpy stub to real GPU hardware, validate multi-machine
+P2P operation, and implement production inference optimizations (continuous
+batching, speculative decoding, expert replication).
 
-> **Why blocked:** Each hardware-dependent item below makes a quantitative
-> trade-off (latency vs throughput, memory vs replication overhead,
-> draft-model accuracy vs speedup). Without real measurements these
-> decisions devolve into guesswork. The infrastructure they plug into
-> (HeterogeneousEngine, GeoAwareMoERouter, KVCacheSender) is already in
-> place; what's missing is the data to drive the design.
+> **Two distinct work categories remain:** items that only require hardware
+> to *run* (validation/configuration — code is already written), and items
+> that require hardware to *design* (new software must be built alongside
+> measurement data). Both categories are blocked until a GPU cluster is
+> available.
 
-### 7.1 Soft Deliverables (no hardware needed)
+### 7.1 Soft Deliverables ✓ COMPLETE
 
-| Task | Status | Note |
-|------|--------|------|
-| CI workflow: `.github/workflows/hardware_test.yml` | ✓ Done | Self-hosted runner config — requires runner tag to execute |
-| Benchmark tooling: `scripts/benchmark.py` | ✓ Done | Token/s throughput, P50/P95/P99 latency; single/gRPC/API modes |
-| Docker Compose multi-node deployment | ✓ Done | `docker-compose.yml` — 4-service cluster (3 nodes + gateway) |
-| Load-test script: `scripts/load_test.py` | ✓ Done | asyncio+httpx concurrent load driver; SLA thresholds; JSON output |
+| Task | Status | Artifact |
+|------|--------|---------|
+| CI workflow: `.github/workflows/hardware_test.yml` | ✓ Done | Self-hosted runner config — attach runner to activate |
+| Benchmark tooling: `scripts/benchmark.py` | ✓ Done | Token/s, P50/P95/P99; single / gRPC / API modes |
+| Docker Compose multi-node deployment | ✓ Done | `docker-compose.yml` — 4-service cluster (dht-seed + 3 nodes + gateway) |
+| Load-test script: `scripts/load_test.py` | ✓ Done | asyncio+httpx concurrent driver; SLA thresholds; JSON output |
 
-### 7.2 Inference Engine 🔒 Hardware-Blocked
+---
 
-| Task | Status | Prerequisite |
+### 7.2 Validation Only 🔒 Hardware-Blocked
+> Code is already written. These tasks close once hardware is available and
+> the existing code is executed against it. No new software required.
+
+| Task | Nature | Prerequisite |
 |------|--------|--------------|
-| Real KTransformers C++ binding integration | 🔒 Blocked | KTransformers compiled for target CUDA arch + DeepSeek-V4 weights (580 GB) |
-| Continuous batching across pipeline stages | 🔒 Blocked | Real model + observable production traffic |
-| Speculative decoding with draft model on fast node | 🔒 Blocked | Real model + draft model checkpoint |
+| Register self-hosted GPU runner | Config | 1× Linux machine + CUDA GPU; runner registered in GitHub Actions Settings |
+| Run `hardware_test.yml` → real-weight numerical alignment | Test | Runner above + DeepSeek-V4-Flash weights (580 GB, HuggingFace) |
+| Multi-machine DHT bootstrap (3+ physical nodes) | Test | 3 machines; run `create_dht(use_hivemind=True)` on each with shared `initial_peers` |
+| Cross-machine KV-cache transfer validation | Test | 2-node cluster; observe `KVCacheSender/Receiver` logs |
+| Multi-machine gRPC latency/throughput benchmark | Test | 2+ machines, ≥1 Gbps LAN; run `scripts/benchmark.py --mode grpc` |
+| Intel SGX quote verification | Test | Intel SGX CPU + PCCS service; run `GramineBackend.attest()` |
+| AMD SEV-SNP attestation report validation | Test | AMD EPYC Milan/Genoa + SEV-SNP firmware; run `SevBackend.attest()` |
 
-### 7.3 Routing & Load Distribution 🔒 Hardware-Blocked
+---
 
-| Task | Status | Prerequisite |
-|------|--------|--------------|
-| Cluster-affinity grouping (nodes within N ms latency) | 🔒 Blocked | Multi-region production deployment to derive thresholds |
-| Expert shard replication for hot experts | 🔒 Blocked | Production expert-frequency telemetry |
-| Adaptive load balancing across nodes | 🔒 Blocked | Real GPU utilization measurements |
+### 7.3 New Code Required 🔒 Hardware-Blocked
+> These items need new software. Hardware is needed both to guide design
+> decisions (latency thresholds, batch sizes, expert frequencies) and to
+> validate the implementation once built.
 
-### 7.4 Hardware CI 🔒 Hardware-Blocked
+#### 7.3.1 KTransformers C++ Binding
+**Effort:** Medium — adapter layer only; inference contract already defined.
 
-| Task | Status | Prerequisite |
-|------|--------|--------------|
-| Self-hosted GPU runner registration | 🔒 Blocked | CUDA-capable physical machine — typically not free |
-| Real-weight numerical alignment tests vs reference impl | 🔒 Blocked | Self-hosted runner above |
+| Task | Notes |
+|------|-------|
+| Replace numpy stub in `HeterogeneousEngine._attention_forward()` | Call `ktransformers.ops.mla_forward(q, k, v, ...)` instead of numpy matmul |
+| Replace numpy stub in `HeterogeneousEngine._moe_forward()` | Call `ktransformers.ops.expert_forward(hidden, weight_path, ...)` |
+| Handle CUDA tensor lifecycle (device placement, dtype casting) | Tensors must stay on GPU between attention and MoE to avoid PCIe round-trip |
+| Update `HeterogeneousEngine.from_gpu_config()` to pass CUDA device | Currently passes dummy device string |
+| **Prerequisite** | `ktransformers` compiled for target CUDA arch + DeepSeek-V4 safetensors shards |
 
-### 7.5 TEE Attestation Validation 🔒 Hardware-Blocked
+#### 7.3.2 Continuous Batching
+**Effort:** Large — touches scheduler, server, orchestrator, and KV-cache.
 
-| Task | Status | Prerequisite |
-|------|--------|--------------|
-| Intel SGX quote verification against known measurements | 🔒 Blocked | Intel SGX-capable CPU + PCCS infrastructure |
-| AMD SEV-SNP attestation report validation | 🔒 Blocked | AMD EPYC Milan/Genoa + SEV-SNP firmware |
+| Task | Notes |
+|------|-------|
+| Add `BatchScheduler` in `astra/inference/` | Dynamic batch window: collect requests for N ms or until M tokens, then dispatch |
+| Modify `InferenceServer` to accept batched `TensorPacket` | Currently processes one packet per RPC; needs per-request KV-cache isolation in batch |
+| Implement padding/unpadding for variable-length sequences | Required for GPU kernel efficiency with ragged batches |
+| Extend `PipelineOrchestrator` to fan-out batch across nodes | Currently one request per chain traversal |
+| **Prerequisite** | Real model + observable production traffic to calibrate batch window and timeout |
 
-### 7.6 Multi-Machine Validation 🔒 Hardware-Blocked
+#### 7.3.3 Speculative Decoding
+**Effort:** Large — requires draft model pipeline running in parallel.
 
-| Task | Status | Prerequisite |
-|------|--------|--------------|
-| Multi-machine DHT bootstrap (3+ physical nodes) | 🔒 Blocked | 3 physical machines with network connectivity |
-| Cross-machine KV-cache transfer validation | 🔒 Blocked | 2-node physical cluster |
-| Multi-machine gRPC latency/throughput benchmark | 🔒 Blocked | 2+ physical machines, 1 Gbps network |
+| Task | Notes |
+|------|-------|
+| Add `DraftModelRunner` in `astra/inference/` | Runs small draft model (e.g. DeepSeek-V2-Lite) to generate K candidate tokens |
+| Implement token acceptance/rejection sampling | Compare draft logits vs target model logits; accept prefix, re-sample on first mismatch |
+| Wire async draft+verify pipeline into `PipelineOrchestrator` | Draft runs on a fast node; verify runs on the full pipeline; merge results |
+| **Prerequisite** | Full model checkpoint + draft model checkpoint |
+
+#### 7.3.4 Expert Shard Replication & Adaptive Load Balancing
+**Effort:** Medium — extends existing `GeoAwareMoERouter` and `EngramNode`.
+
+| Task | Notes |
+|------|-------|
+| Add expert access frequency telemetry to `GeoAwareMoERouter` | Count `(expert_id, node_id)` dispatch events; expose via `/api/monitor` |
+| Implement hot-expert replica placement in `EngramNode` | Replicate top-K experts to nearby nodes based on telemetry |
+| Add replica-aware routing in `GeoAwareMoERouter._best_node_for_expert()` | Choose replica with lowest measured RTT when original node is saturated |
+| Implement GPU utilisation-based load shedding in `PipelineOrchestrator` | Re-route requests away from nodes reporting `gpu_util > 90%` |
+| Add cluster-affinity grouping threshold to `GeoAwareMoERouter` | Group nodes within N ms RTT; N derived from production measurements |
+| **Prerequisite** | Multi-node deployment with real GPU utilisation data and expert-frequency telemetry |
 
 ---
 
@@ -304,7 +333,7 @@ GPU hardware, and real production workloads to design and validate.
 | `tests/test_heterogeneous.py` | ✅ Done | `HeterogeneousEngine` direct unit tests (23 items) |
 | `tests/test_kv_transfer.py` | ✅ Done | KV-cache chunked transfer & reassembly (20 items) |
 | `tests/test_api.py` | ✅ Done | OpenAI API endpoints (httpx AsyncClient) (23 items) |
-| `.github/workflows/hardware_test.yml` | ❌ Pending | Self-hosted GPU Runner CI config |
+| `.github/workflows/hardware_test.yml` | ✅ Done | Self-hosted GPU Runner CI config — attach runner to activate |
 
 ---
 
