@@ -51,6 +51,7 @@ from ..inference.shared_expert_cache import ExpertWeights
 from ..serialization.tensor_pack import TensorSerializer
 from .generated import inference_pb2 as pb2
 from .generated import inference_pb2_grpc as pb2_grpc
+from .tls import TLSConfig, load_server_credentials
 
 log = logging.getLogger(__name__)
 
@@ -144,6 +145,8 @@ class _InferenceServicer(pb2_grpc.InferenceServiceServicer):
         context: grpc.ServicerContext,
     ) -> pb2.PingResponse:
         stats = self._engine.stats()
+        with self._lock:
+            _request_count = self._request_count
         return pb2.PingResponse(
             node_id=self._node_id,
             ready=True,
@@ -152,6 +155,8 @@ class _InferenceServicer(pb2_grpc.InferenceServiceServicer):
             layer_end=self._layer_end,
             expert_shards=self._expert_shards,
             backend=stats.get("backend", "unknown"),
+            gpu_util=stats.get("gpu_util", 0.0),
+            cpu_util=stats.get("cpu_util", 0.0),
         )
 
     # ------------------------------------------------------------------ #
@@ -200,10 +205,12 @@ class InferenceServer:
         expert_shards: Optional[List[int]] = None,
         device_map: Optional[DeviceMap] = None,
         max_workers: int = 4,
+        tls_config: Optional[TLSConfig] = None,
     ) -> None:
         self.node_id = node_id
         self.port = port
         self._expert_shards = expert_shards or list(range(256))
+        self._tls_config = tls_config
 
         dmap = device_map or DeviceMap.cpu_only()
         self._engine = HeterogeneousEngine.from_device_map(dmap)
@@ -227,7 +234,18 @@ class InferenceServer:
         pb2_grpc.add_InferenceServiceServicer_to_server(
             self._servicer, self._grpc_server
         )
-        self._grpc_server.add_insecure_port(f"[::]:{port}")
+
+        if self._tls_config and self._tls_config.enabled and self._tls_config.is_ready():
+            creds = load_server_credentials(
+                self._tls_config.cert_path,
+                self._tls_config.key_path,
+                self._tls_config.ca_cert_path or None,
+            )
+            self._grpc_server.add_secure_port(f"[::]:{port}", creds)
+            log.info("TLS enabled on port %d (mTLS=%s)", port, bool(self._tls_config.ca_cert_path))
+        else:
+            self._grpc_server.add_insecure_port(f"[::]:{port}")
+
         self._max_workers = max_workers
 
     def start(self) -> None:

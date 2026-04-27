@@ -45,15 +45,18 @@ Run::
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import hmac
 import os
 import pathlib
+import secrets
 import time
 import uuid
-from typing import AsyncGenerator, List, Literal, Optional, Union
+from typing import AsyncGenerator, Dict, List, Literal, Optional, Union
 
 import numpy as np
 from fastapi import FastAPI, Request
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -309,6 +312,179 @@ def create_app(
     async def health(raw: Request):
         peers = raw.app.state.dht.get_all_peers()
         return {"status": "ok", "peers": len(peers)}
+
+    # ------------------------------------------------------------------ #
+    # Phase 6: Monitor — live Ping aggregation                              #
+    # ------------------------------------------------------------------ #
+
+    @app.get("/api/monitor")
+    async def monitor(raw: Request):
+        """Ping every known peer and return aggregated hardware stats."""
+        peers = raw.app.state.dht.get_all_peers()
+        nodes: List[dict] = []
+        for p in peers:
+            # Attempt gRPC Ping via InferenceClient
+            try:
+                from ..rpc.client import InferenceClient
+                client = InferenceClient(target=p.address)
+                result = await asyncio.to_thread(client.ping)
+                nodes.append({
+                    "node_id": result.node_id,
+                    "address": p.address,
+                    "layer_start": result.layer_start,
+                    "layer_end": result.layer_end,
+                    "geo_region": result.geo_region,
+                    "expert_shards": result.expert_shards,
+                    "backend": result.backend,
+                    "gpu_util": result.gpu_util,
+                    "cpu_util": result.cpu_util,
+                    "ready": result.ready,
+                    "reachable": True,
+                })
+            except Exception:
+                # Peer unreachable — report stale metadata
+                nodes.append({
+                    "node_id": p.node_id,
+                    "address": p.address,
+                    "layer_start": p.layer_start,
+                    "layer_end": p.layer_end,
+                    "geo_region": getattr(p, "geo_region", "unknown"),
+                    "expert_shards": getattr(p, "expert_shards", []),
+                    "backend": getattr(p, "backend", "unknown"),
+                    "gpu_util": 0.0,
+                    "cpu_util": 0.0,
+                    "ready": False,
+                    "reachable": False,
+                })
+
+        return {"nodes": nodes, "count": len(nodes), "ts": int(time.time())}
+
+    # ------------------------------------------------------------------ #
+    # Phase 6: Login — decentralized identity                                #
+    # ------------------------------------------------------------------ #
+
+    # In-process identity store (production: replace with persistent DB)
+    _identity_nonce: Dict[str, str] = {}
+
+    @app.post("/api/login")
+    async def login(raw: Request):
+        """Decentralized challenge-response login. Returns a session token."""
+        import json as _json
+        body = await raw.body()
+        payload = _json.loads(body)
+        contributor_id = payload.get("contributor_id", "").strip()
+        signature = payload.get("signature", "")
+
+        if not contributor_id or not signature:
+            return JSONResponse(
+                content={"error": "contributor_id and signature required"},
+                status_code=400,
+            )
+
+        # Look up the stored challenge nonce for this contributor
+        nonce = _identity_nonce.pop(contributor_id, None)
+        if nonce is None:
+            return JSONResponse(
+                content={"error": "no challenge requested — call /api/login/challenge first"},
+                status_code=400,
+            )
+
+        # Verify HMAC-SHA256 signature of nonce using contributor_id as shared secret
+        expected = hmac.new(
+            contributor_id.encode(),
+            nonce.encode(),
+            hashlib.sha256,
+        ).hexdigest()
+
+        if not hmac.compare_digest(signature, expected):
+            return JSONResponse(
+                content={"error": "invalid signature"},
+                status_code=403,
+            )
+
+        # Issue session token (production: use JWT with expiry)
+        token = f"astra-session-{contributor_id}-{secrets.token_hex(16)}"
+        token_hash = hashlib.sha256(token.encode()).hexdigest()
+
+        return {
+            "token": token,
+            "token_hash": token_hash,
+            "contributor_id": contributor_id,
+            "expires_at": int(time.time()) + 86400,
+        }
+
+    @app.post("/api/login/challenge")
+    async def login_challenge(raw: Request):
+        """Return a challenge nonce for the given contributor_id."""
+        import json as _json
+        body = await raw.body()
+        payload = _json.loads(body)
+        contributor_id = payload.get("contributor_id", "").strip()
+        if not contributor_id:
+            return JSONResponse(
+                content={"error": "contributor_id required"},
+                status_code=400,
+            )
+
+        nonce = secrets.token_hex(32)
+        _identity_nonce[contributor_id] = nonce
+        return {"contributor_id": contributor_id, "nonce": nonce}
+
+    # ------------------------------------------------------------------ #
+    # Phase 6: Earnings — token accounting                                   #
+    # ------------------------------------------------------------------ #
+
+    # In-process ledger (production: on-chain or auditable DB)
+    _earnings_ledger: Dict[str, float] = {}
+    _earnings_log: List[dict] = []
+
+    @app.get("/api/earnings")
+    async def earnings(raw: Request):
+        """Return earnings ledger for all contributors."""
+        items = [
+            {"contributor_id": cid, "earned": round(amt, 6)}
+            for cid, amt in sorted(_earnings_ledger.items(), key=lambda x: -x[1])
+        ]
+        return {"contributors": items, "count": len(items), "ts": int(time.time())}
+
+    @app.post("/api/earnings/credit")
+    async def earnings_credit(raw: Request):
+        """Credit a contributor for completed work (token‑based incentive)."""
+        import json as _json
+        body = await raw.body()
+        payload = _json.loads(body)
+        contributor_id = payload.get("contributor_id", "").strip()
+        amount = payload.get("amount", 0.0)
+        token = payload.get("token", "")
+
+        if not contributor_id or amount <= 0:
+            return JSONResponse(
+                content={"error": "contributor_id and positive amount required"},
+                status_code=400,
+            )
+
+        # Verify session token
+        expected_prefix = f"astra-session-{contributor_id}-"
+        if not token.startswith(expected_prefix):
+            return JSONResponse(
+                content={"error": "invalid or expired token"},
+                status_code=403,
+            )
+
+        _earnings_ledger[contributor_id] = (
+            _earnings_ledger.get(contributor_id, 0.0) + amount
+        )
+        _earnings_log.append({
+            "contributor_id": contributor_id,
+            "amount": amount,
+            "ts": int(time.time()),
+        })
+
+        return {
+            "contributor_id": contributor_id,
+            "earned": round(_earnings_ledger[contributor_id], 6),
+            "credited": amount,
+        }
 
     return app
 

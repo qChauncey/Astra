@@ -57,6 +57,7 @@ from ..serialization.tensor_pack import (
     DEEPSEEK_V4_NUM_LAYERS,
     TensorPacket,
 )
+from .differential_privacy import LayerDPInjector
 from .shared_expert_cache import ExpertWeights, SharedExpertCache
 
 
@@ -228,6 +229,7 @@ class HeterogeneousEngine:
         self,
         device_map: DeviceMap,
         expert_cache: Optional[SharedExpertCache] = None,
+        dp_injector: Optional[LayerDPInjector] = None,
     ) -> None:
         self._dmap = device_map
         self._expert_cache = expert_cache or SharedExpertCache(
@@ -237,6 +239,8 @@ class HeterogeneousEngine:
         self._kv_cache: Dict[int, LayerKVCache] = {}
         self._kt = KTransformersStub()
         self._backend = _kt_backend
+        self._dp_injector = dp_injector  # Phase 4: DP noise injection
+        self._last_compute_ms: float = 0.0
 
         # Mock weight matrices (production: load from checkpoint)
         self._attn_q_proj: Dict[int, np.ndarray] = {}
@@ -380,6 +384,9 @@ class HeterogeneousEngine:
         """
         Run a sequence of transformer layers on the given packet.
 
+        If a dp_injector is configured (Phase 4), calibrated DP noise is
+        injected after each sub-layer to prevent hidden-state inversion.
+
         Returns a new TensorPacket with updated hidden states.
         """
         if layer_indices is None:
@@ -396,12 +403,20 @@ class HeterogeneousEngine:
                 hidden = self._attention_forward(
                     hidden, layer_idx, position_ids, use_kv_cache
                 )
+                if self._dp_injector is not None:
+                    hidden = self._dp_injector(hidden, layer_idx)
 
             # ---- CPU: MoE FFN ----
             if packet.selected_experts is not None:
                 hidden = self._moe_forward(hidden, packet.selected_experts, layer_idx)
+                if self._dp_injector is not None:
+                    hidden = self._dp_injector(hidden, layer_idx)
 
-        elapsed_ms = (time.perf_counter() - t0) * 1000.0
+        self._last_compute_ms = (time.perf_counter() - t0) * 1000.0
+
+        metadata = {**packet.metadata, "compute_ms": f"{self._last_compute_ms:.2f}"}
+        if self._dp_injector is not None:
+            metadata["dp"] = self._dp_injector.stats()
 
         return TensorPacket(
             packet_id=packet.packet_id,
@@ -413,7 +428,7 @@ class HeterogeneousEngine:
             geo_region=packet.geo_region,
             src_node=packet.src_node,
             dst_node=packet.dst_node,
-            metadata={**packet.metadata, "compute_ms": f"{elapsed_ms:.2f}"},
+            metadata=metadata,
         )
 
     @property
@@ -427,7 +442,7 @@ class HeterogeneousEngine:
         self._kv_cache.clear()
 
     def stats(self) -> dict:
-        return {
+        result = {
             "backend": self._backend,
             "device_map": {
                 "attention_on_gpu": self._dmap.attention_on_gpu,
@@ -435,4 +450,15 @@ class HeterogeneousEngine:
             },
             "kv_cache_layers": len(self._kv_cache),
             "expert_cache": self._expert_cache.stats(),
+            "gpu_util": 0.0,
+            "cpu_util": 0.0,
         }
+        # Simulate utilization based on recent forward-pass compute time
+        # (production backend would read real GPU/CPU counters)
+        if self._dmap.attention_on_gpu and self._last_compute_ms > 0:
+            result["gpu_util"] = min(0.95, self._last_compute_ms / 500.0)
+        if self._dmap.moe_on_cpu and self._last_compute_ms > 0:
+            result["cpu_util"] = min(0.90, self._last_compute_ms / 800.0)
+        if self._dp_injector is not None:
+            result["dp"] = self._dp_injector.stats()
+        return result

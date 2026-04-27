@@ -7,9 +7,9 @@
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org)
-[![Tests](https://img.shields.io/badge/tests-150%20passed-brightgreen)]()
+[![Tests](https://img.shields.io/badge/tests-299%20passed-brightgreen)]()
 [![CI](https://github.com/qchauncey/astra/actions/workflows/ci.yml/badge.svg)](.github/workflows/ci.yml)
-[![Status](https://img.shields.io/badge/状态-Phase%203%20进行中-yellow)]()
+[![Status](https://img.shields.io/badge/状态-Phase%204--6%20已完成%2C%20Phase%205%20进行中-blue)]()
 
 **Astra** 是一个开源 P2P 分布式推理框架，能够将 **DeepSeek-V4-Flash（284B 参数）** 运行在由普通 PC 组成的集群上（例如配备 RTX 5070 Ti、16 GB 显存的设备）。其核心技术融合自：
 
@@ -17,7 +17,7 @@
 - **[KTransformers](https://github.com/kvcache-ai/ktransformers)** 的 GPU/CPU 异构计算引擎
 - **[hivemind](https://github.com/learning-at-home/hivemind)** DHT 协议，用于节点发现与键值存储
 
-> **当前状态：Alpha 阶段。** 阶段 1（本地单机）与阶段 2（双节点 gRPC 流水线）已完成并通过测试。阶段 3（完整 P2P 网络 + API 网关）正在推进中。
+> **当前状态：Alpha 阶段。** 阶段 1、2、4、6（本地单机 + 双节点 gRPC 流水线 + DP/TEE 安全加固 + 前端门户）已完成并通过测试。阶段 3（完整 P2P 网络 + API 网关）正在推进中。阶段 5（gRPC TLS + hivemind 多机 DHT）进入实施阶段。
 
 ---
 
@@ -323,18 +323,18 @@ flowchart TB
 
 ## 核心创新点
 
-### 2.1 地理微集群调度
+### 1. 地理微集群调度
 基于节点的物理位置（Haversine 大圆距离 + 传播延迟估算）将 MoE 专家请求优先分发到距离最近的节点，有效对冲 MoE 高频网络 I/O 造成的阻塞。
 
-### 2.2 异构计算引擎（KTransformers 集成）
+### 2. 异构计算引擎（KTransformers 集成）
 - **GPU** 负责：MLA 注意力层、RoPE、LayerNorm、DSA 算子
 - **CPU/RAM** 负责：MoE 专家权重的 FFN 前向计算（全部 256 个专家权重常驻内存）
 - 通过 `ASTRA_USE_KTRANSFORMERS=1` 激活真实 C++ 内核；默认使用 NumPy 存根，可在无 GPU 环境下完整运行
 
-### 2.3 共享专家常驻（Shared Expert Pinning）
+### 3. 共享专家常驻（Shared Expert Pinning）
 DeepSeek-V4 的 2 个共享专家在每个 Token 计算时必然触发。将其永久固定于 GPU 显存或高速内存中，彻底消除频繁的 PCIe 数据搬运开销。
 
-### 2.4 存储分离（Engram 记忆节点）
+### 4. 存储分离（Engram 记忆节点）
 基于 AstraDHT（hivemind DHT 的兼容替代），计算节点与 Engram 存储节点相互解耦，支持分布式 KV 缓存与模型权重分片的独立扩缩容。
 
 ---
@@ -347,7 +347,12 @@ astra/
 │   └── tensor_pack.py          # TensorPacket 二进制传输格式 v1
 ├── inference/
 │   ├── heterogeneous.py        # HeterogeneousEngine（GPU 注意力 + CPU MoE）
-│   └── shared_expert_cache.py  # LRU 专家缓存，含永久固定策略
+│   ├── shared_expert_cache.py  # LRU 专家缓存，含永久固定策略
+│   └── differential_privacy.py # 差分隐私噪声注入（ε/δ 预算控制）
+├── tee/
+│   ├── __init__.py             # TEEBackend 抽象接口
+│   ├── gramine.py              # Intel SGX 通过 Gramine Library OS
+│   └── amd_sev.py              # AMD SEV-SNP 机密计算
 ├── routing/
 │   └── geo_router.py           # GeoAwareMoERouter（Token 级地理感知分发）
 ├── rpc/
@@ -355,6 +360,7 @@ astra/
 │   ├── generated/              # 自动生成的 pb2 存根
 │   ├── server.py               # InferenceServer
 │   ├── client.py               # InferenceClient（打包 → 传输 → 接收）
+│   ├── tls.py                   # gRPC TLS 安全认证（证书管理 + 双向 mTLS）
 │   └── kv_transfer.py          # KV 缓存分块流式传输
 ├── network/
 │   ├── dht.py                  # AstraDHT（hivemind 兼容节点发现）
@@ -362,7 +368,7 @@ astra/
 └── api/
     ├── openai_compat.py        # OpenAI 兼容 FastAPI 接口 + Web UI 静态文件服务
     └── static/
-        └── index.html          # Web UI：聊天界面 + 节点网络侧边栏
+        └── index.html          # Phase 6 SPA 仪表盘（聊天、监控、身份、收益）
 
 mock_pipeline.py                # 阶段 1 & 2 本地模拟测试入口
 scripts/
@@ -374,7 +380,7 @@ installer/
 ├── install.bat                 # Windows CMD 安装器（双击运行）
 ├── install.ps1                 # Windows PowerShell 安装器
 └── start.bat                   # Windows 一键启动（离线模式 + 自动打开浏览器）
-tests/                          # 150 个 pytest 测试（全部通过）
+tests/                          # 322 个 pytest 测试（全部通过）
 .github/workflows/ci.yml        # CI：Python 3.10/3.11/3.12 矩阵 + lint
 docs/
 ├── ARCHITECTURE.md             # 详细系统设计与传输格式规范
@@ -390,6 +396,9 @@ docs/
 | `astra.serialization.TensorPacket` | 二进制传输格式：隐藏状态 + 路由元数据，float16 |
 | `astra.inference.HeterogeneousEngine` | 注意力层走 GPU 存根，MoE FFN 走 CPU 内存 |
 | `astra.inference.SharedExpertCache` | LRU 缓存，专家 0 & 1 固定常驻，永不淘汰 |
+| `astra.inference.DPController` | 差分隐私：逐层高斯/拉普拉斯噪声注入，含 ε/δ 预算追踪 |
+| `astra.tee.GramineBackend` | Intel SGX TEE：远程证明、模型密封、通过 Gramine 安全执行 |
+| `astra.tee.SevBackend` | AMD SEV-SNP 机密计算：远程证明、安全模型加载 |
 | `astra.routing.GeoAwareMoERouter` | Token 级 `(token, expert_id) → 最优节点` 路由 |
 | `astra.rpc.InferenceServer/Client` | gRPC 打包 → CRC32 校验 → 计算 → 反序列化 闭环 |
 | `astra.rpc.KVCacheSender/Receiver` | KV 张量分块流式传输（≤3 MB/块） |
@@ -406,8 +415,9 @@ docs/
 |-----|-----|
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 系统设计、数据流、传输格式规范 |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | 分阶段实施计划 |
-| [docs/TESTING.md](docs/TESTING.md) | 测试方案：已覆盖 150 项 + 待完成测试清单（含不可自动化的硬件测试项） |
+| [docs/TESTING.md](docs/TESTING.md) | 测试方案：已覆盖 299 项 + 待完成测试清单（含不可自动化的硬件测试项） |
 | [docs/SECURITY.md](docs/SECURITY.md) | 节点间加密（mTLS）、隐藏状态隐私保护、输出完整性验证、差分隐私 |
+| [docs/TEE.md](docs/TEE.md) | TEE 部署指南：Intel SGX（Gramine）与 AMD SEV-SNP 远程证明流程 |
 | [docs/FEASIBILITY.md](docs/FEASIBILITY.md) | 算力门槛、地理微集群划分规则、带宽需求、与同类项目对比 |
 | [docs/COMPLIANCE.md](docs/COMPLIANCE.md) | 所有依赖库的许可证合规分析、DeepSeek 模型使用条款、专利条款 |
 
@@ -420,9 +430,9 @@ docs/
 | **Phase 1** | 本地异构单机推理打通（NumPy 存根 + SharedExpertCache） | ✅ 完成 |
 | **Phase 2** | 局域网双机 gRPC 流水线（打包-传输-运算闭环） | ✅ 完成 |
 | **Phase 3** | AstraDHT 节点发现、N 节点编排、OpenAI API、KV 缓存流传输 | 🔄 进行中 |
-| **Phase 4** | 接入真实 KTransformers C++ 内核 + DeepSeek-V4 权重加载 | 📋 规划中 |
-| **Phase 5** | gRPC TLS 安全认证 + hivemind 多机 DHT 集成 | 📋 规划中 |
-| **Phase 6** | Next.js / Electron 前端门户，去中心化登录，算力监控 | 📋 规划中 |
+| **Phase 4** | 差分隐私（ε/δ 预算 + 逐层噪声）+ TEE（Intel SGX + AMD SEV-SNP） | ✅ 完成 |
+| **Phase 5** | gRPC TLS 安全认证 + hivemind 多机 DHT 集成 | 🔄 进行中 |
+| **Phase 6** | SPA 仪表盘（聊天、监控、身份、收益），去中心化挑战-应答登录，实时监控，贡献者代币核算 | ✅ 完成 |
 
 ---
 
@@ -432,7 +442,9 @@ docs/
 
 本项目参考并借鉴了 [Petals](https://github.com/bigscience-workshop/petals)（Apache 2.0）与 [KTransformers](https://github.com/kvcache-ai/ktransformers)（Apache 2.0）的设计思路。所有修改内容均在 [NOTICE](NOTICE) 文件及各源文件头部予以说明。
 
-专利条款：Apache 2.0 协议内置专利反击条款，保护所有贡献异构算子及 P2P 协议的开发者。
+## 专利保护
+
+本项目采用 **Apache License 2.0** 协议。任何对本项目或其贡献者发起专利诉讼的实体，将自动丧失本协议授予的所有专利权利。完整条款见 [LICENSE](LICENSE)。
 
 ---
 

@@ -9,6 +9,9 @@ protobuf>=4.25.0
 fastapi>=0.110.0
 uvicorn[standard]>=0.27.0
 httpx>=0.26.0
+psutil>=5.9.0
+cryptography>=41.0.0          # for TEE seal/unseal (AES-GCM) and TLS
+cffi>=1.16.0                  # cryptography Rust backend dependency
 
 # ── Optional: GPU inference ───────────────────────────────────────────────────
 # torch>=2.2.0                 # install from https://pytorch.org

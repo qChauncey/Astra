@@ -34,13 +34,14 @@ from __future__ import annotations
 import logging
 import time
 import zlib
-from typing import Dict, Iterator, List
+from typing import Dict, Iterator, List, Optional
 
 import grpc
 
 from ..serialization.tensor_pack import TensorPacket, TensorSerializer
 from .generated import inference_pb2 as pb2
 from .generated import inference_pb2_grpc as pb2_grpc
+from .tls import TLSConfig, load_client_credentials
 
 log = logging.getLogger(__name__)
 
@@ -68,11 +69,25 @@ class InferenceClient:
         address: str,
         node_id: str = "client",
         timeout: float = 30.0,
+        tls_config: Optional[TLSConfig] = None,
     ) -> None:
         self._address = address
         self._node_id = node_id
         self._timeout = timeout
-        self._channel = grpc.insecure_channel(address, options=_DEFAULT_OPTIONS)
+
+        if tls_config and tls_config.enabled and tls_config.is_ready():
+            creds = load_client_credentials(
+                tls_config.cert_path,
+                tls_config.key_path,
+                tls_config.ca_cert_path,
+            )
+            self._channel = grpc.secure_channel(
+                address, creds, options=_DEFAULT_OPTIONS
+            )
+            log.debug("TLS enabled for client → %s", address)
+        else:
+            self._channel = grpc.insecure_channel(address, options=_DEFAULT_OPTIONS)
+
         self._stub = pb2_grpc.InferenceServiceStub(self._channel)
         self._total_calls = 0
         self._total_bytes_sent = 0
@@ -195,6 +210,8 @@ class InferenceClient:
                 "layer_end": resp.layer_end,
                 "expert_shards": list(resp.expert_shards[:10]),  # truncate for display
                 "backend": resp.backend,
+                "gpu_util": resp.gpu_util,
+                "cpu_util": resp.cpu_util,
             }
         except grpc.RpcError as err:
             return {"error": str(err), "ready": False}

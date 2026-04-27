@@ -14,5 +14,11 @@
 
 from .heterogeneous import HeterogeneousEngine, DeviceMap
 from .shared_expert_cache import SharedExpertCache
+from .tokenizer import AstraTokenizer, load_tokenizer, get_tokenizer
+from .weight_loader import WeightLoader
 
-__all__ = ["HeterogeneousEngine", "DeviceMap", "SharedExpertCache"]
+__all__ = [
+    "HeterogeneousEngine", "DeviceMap", "SharedExpertCache",
+    "AstraTokenizer", "load_tokenizer", "get_tokenizer",
+    "WeightLoader",
+]
