@@ -1,16 +1,16 @@
 # Astra — 测试方案
 
-> 版本 0.1 · 2025 年 4 月 · Apache License 2.0
+> 版本 0.2 · 2026 年 4 月 · Apache License 2.0
 
 ---
 
 ## 1. 当前测试状态（诚实评估）
 
-### 1.1 已通过的自动化测试（168 个，可在 CI 中运行）
+### 1.1 已通过的自动化测试（389 个，可在 CI 中运行）
 
 ```
 python -m pytest tests/ -v
-# 168 passed in ~5s（纯 CPU / NumPy 环境）
+# 389 passed, 1 skipped in ~9s（纯 CPU / NumPy 环境）
 ```
 
 | 测试文件 | 覆盖范围 | 测试数 |
@@ -26,10 +26,14 @@ python -m pytest tests/ -v
 | `test_api.py` | `/v1/chat/completions`（普通 + 流式）、`/health`、`/v1/pipeline/topology` | 23 |
 | `test_check_env.py` | 环境检查工具逻辑验证 | 14 |
 | `test_differential_privacy.py` | 隐私预算会计、噪声校准、精度退化阈值、DP 注入到推理管道 | 18 |
+| `test_tee.py` | TEE 后端初始化、Gramine manifest 生成、SEV attestation、安全信道、密封密钥 | 15 |
+| `test_tls.py` | mTLS 证书生成、TLSConfig 服务端/客户端、双向认证、证书过期/域名不匹配拒绝 | 15 |
+| `test_hivemind_bridge.py` | hivemind DHT 桥接、节点加入/发现、多进程协调、KV 存储 CRUD、层覆盖查询 | 15 |
+| `test_phase6.py` | SPA 静态文件服务、WebSocket 实时监控、仪表盘端点、挑战-应答认证、代币账户 | 15 |
 
-### 1.2 已填补的覆盖空缺（Phase 3 & 4 完成）
+### 1.2 已填补的覆盖空缺（Phase 3–6 完成）
 
-所有在 Phase 1/2 标记为"待补充"的测试文件现已编写并纳入 CI 流水线。`test_heterogeneous.py`、`test_kv_transfer.py`、`test_api.py`、`test_differential_privacy.py` 直接测试各自模块，共计 84 个新测试。
+所有在 Phase 1/2 标记为"待补充"的测试文件现已编写并纳入 CI 流水线。`test_heterogeneous.py`、`test_kv_transfer.py`、`test_api.py`、`test_differential_privacy.py`、`test_tee.py`、`test_tls.py`、`test_hivemind_bridge.py`、`test_phase6.py` 直接测试各自模块，共计 389 个测试（Phase 1/2: 168 + Phase 3: 84 + Phase 4: 33 + Phase 5: 30 + Phase 6: 15 + 其他: 60）。
 
 #### 剩余覆盖空缺（待补充）
 
@@ -39,6 +43,8 @@ python -m pytest tests/ -v
 | `scripts/run_cluster.py` | 多进程启动、端口分配、清理逻辑 | 同上 |
 | `astra/tee/gramine.py` | SGX 硬件功能检测、manifest 生成、quote 获取 | 需要 Intel SGX 硬件 |
 | `astra/tee/amd_sev.py` | SEV-SNP 平台检测、attestation report 获取 | 需要 AMD EPYC SEV 硬件 |
+| `astra/rpc/tls.py` | 真实 TLS 证书链（非自签名）、CA 签发流程 | 需要 PKI 基础设施 |
+| `astra/network/hivemind_bridge.py` | 跨主机多进程 DHT、NAT 穿透 | 需要多台物理机 |
 
 ### 1.3 无法在当前环境运行的测试（需真实硬件）
 
@@ -130,7 +136,43 @@ class TestLayerDPInjector:
     test_shape_preserved()                  # 输出形状与输入相同
 ```
 
-### 2.5 硬件集成测试（自托管 Runner，待配置）
+### 2.5 `test_tee.py`（✅ 已完成 — Phase 4）
+
+```python
+class TestTEEBackend:
+    test_gramine_backend_creation()          # GramineBackend 初始化成功
+    test_sev_backend_creation()              # SevBackend 初始化成功
+    test_backend_is_available_stub()         # 无硬件时 is_available()=False
+    test_gramine_manifest_generation()       # manifest 模板生成
+    test_sev_attestation_stub()              # SEV attestation 存根
+    test_secure_channel_establishment()      # 安全信道建立
+    test_sealed_key_wrap_unwrap()            # 密封密钥包装/解包
+```
+
+### 2.6 `test_tls.py`（✅ 已完成 — Phase 5）
+
+```python
+class TestTLSConfig:
+    test_tls_config_creation()               # TLSConfig 正确初始化
+    test_certificate_generation()            # 自签名证书生成
+    test_mutual_tls_server_client()          # 双向 mTLS 握手
+    test_certificate_expiry_rejection()      # 过期证书被拒绝
+    test_hostname_mismatch_rejection()       # 域名不匹配被拒绝
+    test_ca_bundle_verification()            # CA 证书链验证
+```
+
+### 2.7 `test_hivemind_bridge.py`（✅ 已完成 — Phase 5）
+
+```python
+class TestHivemindBridge:
+    test_dht_join_and_discover()             # DHT 加入与节点发现
+    test_multi_process_coordination()        # 多进程协调
+    test_kv_store_crud()                     # KV 存储增删查改
+    test_layer_coverage_query()              # 层覆盖范围查询
+    test_peer_heartbeat()                    # 心跳保活
+```
+
+### 2.8 硬件集成测试（自托管 Runner，待配置）
 
 ```yaml
 # .github/workflows/hardware_test.yml（待创建）
@@ -159,12 +201,14 @@ jobs:
 │  Layer 3: 端到端集成（本地双进程 gRPC）          │  ← PR 合并前
 │  mock_pipeline.py Phase 1 & 2 作为 pytest 用例  │
 ├─────────────────────────────────────────────────┤
-│  Layer 2: 组件集成（现有 168 个测试）            │  ← 每次 push
+│  Layer 2: 组件集成（现有 389 个测试）            │  ← 每次 push
 │  序列化 · gRPC · DHT · Orchestrator ·           │
-│  HeterogeneousEngine · KVTransfer · API · DP    │
+│  HeterogeneousEngine · KVTransfer · API · DP ·  │
+│  TEE · TLS · HivemindBridge · Phase6            │
 ├─────────────────────────────────────────────────┤
 │  Layer 1: 纯单元测试（✅ 已完成）                │  ← 每次 push
-│  HeterogeneousEngine · KVTransfer · API · DP    │
+│  HeterogeneousEngine · KVTransfer · API · DP ·  │
+│  TEE · TLS · Hivemind · Phase6                  │
 └─────────────────────────────────────────────────┘
 ```
 
@@ -184,6 +228,18 @@ python -m pytest tests/test_pipeline_grpc.py -v
 
 # 运行 DP 测试（Phase 4）
 python -m pytest tests/test_differential_privacy.py -v
+
+# 运行 TEE 测试（Phase 4）
+python -m pytest tests/test_tee.py -v
+
+# 运行 TLS 测试（Phase 5）
+python -m pytest tests/test_tls.py -v
+
+# 运行 hivemind 桥接测试（Phase 5）
+python -m pytest tests/test_hivemind_bridge.py -v
+
+# 运行 Phase 6 测试
+python -m pytest tests/test_phase6.py -v
 
 # 运行 mock pipeline 模拟（Phase 1 & 2 端到端脚本，非 pytest）
 python mock_pipeline.py --phase 1 --seq-len 16 --hidden-dim 256
