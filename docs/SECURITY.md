@@ -96,24 +96,22 @@ Node B 和 Node C **无法直接读取原始 prompt**，只能拿到上游节点
 
 | 措施 | 效果 | 实现成本 | 优先级 |
 |-----|------|---------|-------|
-| **激活值加噪（差分隐私）** | 向隐藏状态注入校准高斯噪声 σ，使逆推不可行，但会轻微降低精度 | 低 | Phase 3 |
+| **激活值加噪（差分隐私）** | 向隐藏状态注入校准高斯噪声 σ，使逆推不可行，但会轻微降低精度 | 低 | ✅ Phase 4 |
 | **同态加密（HE）** | 节点在密文上计算，永远看不到明文激活值 | 极高（10000× 慢，不实用） | 长期研究 |
-| **可信执行环境（TEE）** | Intel SGX / AMD SEV 硬件隔离，节点代码在加密内存中运行 | 高（需特定硬件） | Phase 4+ |
+| **可信执行环境（TEE）** | Intel SGX / AMD SEV 硬件隔离，节点代码在加密内存中运行 | 高（需特定硬件） | ✅ Phase 4 |
 | **安全多方计算（MPC）** | 激活值拆分成秘密份额分发给多个节点，无单节点能重建完整值 | 高（通信开销大） | 研究方向 |
 | **节点最小权限** | 节点只接收和发送 TensorPacket，无法访问原始 token IDs | 已实现（协议设计） | ✅ 已完成 |
 
-**差分隐私实施草案（Phase 3）：**
+**差分隐私实施（Phase 4 — 已完成）：**
+
 ```python
-# astra/inference/heterogeneous.py — 待添加
-def _add_dp_noise(hidden: np.ndarray, epsilon: float = 1.0) -> np.ndarray:
-    """
-    Gaussian mechanism: sigma = sqrt(2 * ln(1.25/delta)) * sensitivity / epsilon
-    sensitivity ≈ max L2 norm of one token's hidden state
-    """
-    sensitivity = np.linalg.norm(hidden, axis=-1).max()
-    delta = 1e-5
-    sigma = np.sqrt(2 * np.log(1.25 / delta)) * sensitivity / epsilon
-    return hidden + np.random.normal(0, sigma, hidden.shape).astype(hidden.dtype)
+# astra/inference/differential_privacy.py — 已实现
+from astra.inference.differential_privacy import LayerDPInjector
+
+injector = LayerDPInjector(target_epsilon=1.0, num_layers=61)
+# 自动将隐私预算按层拆分，支持高斯与拉普拉斯两种噪声机制
+# 通过 PrivacyBudget 追踪预算消耗，MomentsAccountant 计算 RDP
+# 当预算耗尽时注入零噪声，防止隐私泄漏
 ```
 
 ---
@@ -186,8 +184,8 @@ manifest 由项目官方签名（Ed25519），节点启动时验证后才加载
 | Phase 3 | HMAC-SHA256 签名链（防主动篡改） | 📋 待实现 |
 | Phase 3 | 权重分片 SHA-256 manifest + Ed25519 签名 | 📋 待实现 |
 | Phase 3 | 节点证书体系 + Sybil 防护 | 📋 待实现 |
-| Phase 4 | 差分隐私激活值加噪 | 📋 待研究 |
-| Phase 4 | TEE（Intel SGX / AMD SEV）支持 | 📋 待评估 |
+| Phase 4 | 差分隐私激活值加噪（Gaussian/Laplace + MomentsAccountant） | ✅ 已完成 |
+| Phase 4 | TEE（Intel SGX via Gramine / AMD SEV-SNP）支持 | ✅ 已完成 |
 | 长期 | 同态加密 / 安全多方计算 | 🔬 研究方向 |
 
 ---

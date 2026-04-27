@@ -28,6 +28,7 @@ dependencies = [
     "uvicorn[standard]>=0.27.0",
     "httpx>=0.26.0",
     "psutil>=5.9.0",
+    "cryptography>=41.0.0",
 ]
 
 [project.optional-dependencies]
@@ -52,3 +53,6 @@ python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
 addopts = "-v --tb=short"
+markers = [
+    "integration: tests that require hardware (GPU, SGX, SEV) or multi-node networking",
+]

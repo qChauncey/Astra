@@ -6,7 +6,7 @@
 
 ## Overview
 
-Astra is developed in three phases, each building on the previous.  The goal of each phase is a **runnable, testable artifact** — not just design work.
+Astra is developed in four phases, each building on the previous.  The goal of each phase is a **runnable, testable artifact** — not just design work.
 
 ---
 
@@ -112,6 +112,40 @@ python mock_pipeline.py --phase 2 --seq-len 16 --hidden-dim 256
 | Next.js / Electron UI scaffold | Pending | Decentralized login |
 | Real-time compute / VRAM / RTT monitoring dashboard | Pending | Pulls stats from Ping RPCs |
 | Contributor earnings / token accounting | Pending | For optional incentive layer |
+
+---
+
+## Phase 4 — Security & Privacy Hardening (COMPLETE ✓)
+
+**Goal:** Hardened inference with differential privacy protections and Trusted Execution Environment support.
+
+### 4.1 Differential Privacy (Hidden-State Noise Injection)
+
+| Task | Status | Module |
+|------|--------|--------|
+| `PrivacyBudget` (ε/δ tracking, exhaustion check) | ✓ Done | `astra/inference/differential_privacy.py` |
+| `MomentsAccountant` (RDP → (ε,δ) conversion via Rényi divergence) | ✓ Done | `astra/inference/differential_privacy.py` |
+| `DPController` (Gaussian + Laplace mechanisms, utility verification) | ✓ Done | `astra/inference/differential_privacy.py` |
+| `LayerDPInjector` (per-layer epsilon splitting across 61 layers) | ✓ Done | `astra/inference/differential_privacy.py` |
+| `HeterogeneousEngine` integration (`dp_injector` parameter) | ✓ Done | `astra/inference/heterogeneous.py` |
+| DP unit tests (budget accounting, noise calibration, utility thresholds) | ✓ Done | `tests/test_differential_privacy.py` |
+
+### 4.2 Trusted Execution Environment (TEE)
+
+| Task | Status | Module |
+|------|--------|--------|
+| `TEEBackend` abstract interface (status, attest, seal, unseal, get_quote) | ✓ Done | `astra/tee/__init__.py` |
+| `GramineBackend` — Intel SGX via Gramine Library OS | ✓ Done | `astra/tee/gramine.py` |
+| `SevBackend` — AMD SEV-SNP confidential computing | ✓ Done | `astra/tee/amd_sev.py` |
+| TEE deployment guide (hardware requirements, manifest generation, attestation flow) | ✓ Done | `docs/TEE.md` |
+
+### 4.3 Documentation & Testing
+
+| Task | Status | Notes |
+|------|--------|-------|
+| Phase 4 roadmap entry | ✓ Done | This document |
+| Security roadmap update (DP + TEE marked complete) | ✓ Done | `docs/SECURITY.md` |
+| Testing matrix update (DP test file added) | ✓ Done | `docs/TESTING.md` |
 
 ---
 

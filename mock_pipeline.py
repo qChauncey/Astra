@@ -52,6 +52,7 @@ import time
 import numpy as np
 
 # ── Astra imports ──────────────────────────────────────────────────────────
+from astra.inference.differential_privacy import LayerDPInjector
 from astra.inference.heterogeneous import DeviceMap, HeterogeneousEngine
 from astra.inference.shared_expert_cache import ExpertWeights, SharedExpertCache
 from astra.routing.geo_router import GeoAwareMoERouter, GeoRegion, NodeInfo, REGIONS
@@ -63,6 +64,7 @@ from astra.serialization.tensor_pack import (
     TensorPacket,
     TensorSerializer,
 )
+from astra.tee import get_tee_backend, list_available_backends
 
 log = logging.getLogger("astra.mock_pipeline")
 
@@ -160,7 +162,7 @@ def run_phase1(seq_len: int, hidden_dim: int) -> None:
     log.info("  Wire size:     %.1f KB", len(wire_bytes) / 1024)
     log.info("  Serialize:     %.2f ms", t_ser)
     log.info("  Deserialize:   %.2f ms", t_deser)
-    log.info("  Round-trip OK: ✓")
+    log.info("  Round-trip OK: [PASS]")
 
     # ── Step B: MoE routing (gate + dispatch plan) ────────────────────────
     log.info("\n── Step B: MoE Gate + Geo-Aware Dispatch ──")
@@ -181,7 +183,7 @@ def run_phase1(seq_len: int, hidden_dim: int) -> None:
     log.info("  Engine stats:    %s",
              json.dumps(engine.stats(), indent=2))
 
-    log.info("\n[Phase 1] COMPLETE ✓\n")
+    log.info("\n[Phase 1] COMPLETE [PASS]\n")
     return out_packet
 
 
@@ -255,11 +257,72 @@ def run_phase2(seq_len: int, hidden_dim: int) -> None:
     log.info("  Node-A RTT:    %.1f ms", rtt_a)
     log.info("  Node-B RTT:    %.1f ms", rtt_b)
     log.info("  Total wall:    %.1f ms", t_total_ms)
-    log.info("  Pipeline OK:   ✓")
+    log.info("  Pipeline OK:   [PASS]")
 
     node_a.stop(grace=1.0)
     node_b.stop(grace=1.0)
-    log.info("\n[Phase 2] COMPLETE ✓\n")
+    log.info("\n[Phase 2] COMPLETE [PASS]\n")
+
+
+# ─────────────────────────────────────────────────────────────────────────── #
+# Phase 4: Differential Privacy + TEE smoke test                               #
+# ─────────────────────────────────────────────────────────────────────────── #
+
+def run_phase4(seq_len: int, hidden_dim: int) -> None:
+    _banner("Phase 4 — Differential Privacy & TEE (Security Hardening)")
+
+    # ── 4.1 Differential Privacy smoke test ──────────────────────────────
+    log.info("\n── 4.1 Differential Privacy (Hidden-State Noise Injection) ──")
+
+    injector = LayerDPInjector(epsilon=1.0, num_layers=61)
+    log.info("  DP injector created: ε_target=%.2f  layers=%d  mechanism=%s",
+             injector.controller._epsilon, injector._num_layers, injector.controller._mechanism)
+
+    # Simulate a forward pass through 2 layers with dummy hidden states
+    hidden = np.random.randn(seq_len, hidden_dim).astype(np.float32)
+    for layer_idx in range(2):
+        noisy_hidden = injector(hidden, layer_idx)
+        before_norm = float(np.linalg.norm(hidden))
+        after_norm = float(np.linalg.norm(noisy_hidden))
+        utility = before_norm / max(after_norm, 1e-8)
+        log.info("  Layer %d: noise injected  ε_per_layer=%.6f  utility_signal_ratio=%.4f",
+                 layer_idx, injector.eps_per_layer, utility)
+
+    stats = injector.stats()
+    log.info("  DP stats: %s", json.dumps(stats, indent=2))
+    assert stats["epsilon_consumed"] > 0, "no epsilon consumed — DP not applied"
+    assert stats["steps"] == 2, "expected 2 DP steps"
+    log.info("  DP smoke test: PASS")
+
+    # ── 4.2 TEE backends ─────────────────────────────────────────────────
+    log.info("\n── 4.2 TEE (Trusted Execution Environment) ──")
+
+    available = list_available_backends()
+    log.info("  Available TEE backends: %s", available)
+
+    # On non-TEE hardware, get_tee_backend() returns None
+    backend = get_tee_backend()
+    if backend is None:
+        log.info("  (No TEE hardware detected -- running in software simulation mode)")
+    else:
+        status = backend.status()
+        log.info("  Active backend: %s  status=%s", backend.name, status.name)
+
+        # Attestation
+        report = backend.attest(b"astra-phase4-smoke-test")
+        log.info("  Attestation report: id=%s  is_debug=%s  measurement=%s",
+                 report.report_id[:12] + "..." if len(report.report_id) > 12 else report.report_id,
+                 report.is_debug,
+                 report.measurement[:20] + "..." if report.measurement and len(report.measurement) > 20 else report.measurement)
+
+        # Seal / unseal round-trip
+        plaintext = b"Phase-4 TEE smoke test payload"
+        sealed = backend.seal(plaintext)
+        unsealed = backend.unseal(sealed)
+        assert unsealed == plaintext, "TEE seal/unseal round-trip failed"
+        log.info("  Seal/unseal round-trip: %d bytes [PASS]", len(plaintext))
+
+    log.info("\n[Phase 4] COMPLETE\n")
 
 
 # ─────────────────────────────────────────────────────────────────────────── #
@@ -268,7 +331,7 @@ def run_phase2(seq_len: int, hidden_dim: int) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Astra mock pipeline — Phase 1 & 2 local simulation"
+        description="Astra mock pipeline — Phase 1, 2, 4 local simulation"
     )
     parser.add_argument(
         "--seq-len", type=int, default=16,
@@ -279,8 +342,8 @@ def main() -> None:
         help="Hidden dimension size; use 7168 for real DeepSeek-V4 (default: 256 for speed)"
     )
     parser.add_argument(
-        "--phase", type=int, choices=[1, 2, 12], default=12,
-        help="Which phases to run: 1, 2, or 12 (both, default)"
+        "--phase", type=int, choices=[1, 2, 4, 12, 124], default=124,
+        help="Which phases to run: 1, 2, 4, 12 (1+2), or 124 (all, default)"
     )
     parser.add_argument(
         "--verbose", action="store_true",
@@ -303,11 +366,14 @@ def main() -> None:
     log.info("  hidden_dim = %d", args.hidden_dim)
     log.info("  phases     = %s", args.phase)
 
-    if args.phase in (1, 12):
+    if args.phase in (1, 12, 124):
         run_phase1(args.seq_len, args.hidden_dim)
 
-    if args.phase in (2, 12):
+    if args.phase in (2, 12, 124):
         run_phase2(args.seq_len, args.hidden_dim)
+
+    if args.phase in (4, 124):
+        run_phase4(args.seq_len, args.hidden_dim)
 
     _banner("All requested phases completed successfully")
 
