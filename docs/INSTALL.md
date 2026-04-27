@@ -31,6 +31,7 @@
 
 ---
 
+<a id="one-click-windows"></a>
 ## 一键安装（Windows）· One-Click Install (Windows)
 
 1. 克隆或下载此仓库 · Clone or download this repository
@@ -108,6 +109,7 @@ python scripts/run_node.py --node-id dht-node --port 50051
 
 ---
 
+<a id="windows-native"></a>
 ## Windows — 无 GPU（原生）· No GPU (Native)
 
 无 GPU 的 Windows 节点**不能贡献推理算力**。有效角色：API 网关、DHT 发现节点、开发测试。  
@@ -144,6 +146,7 @@ python scripts/run_node.py --node-id dht-node --port 50051
 
 ---
 
+<a id="windows-gpu-wsl2"></a>
 ## Windows — GPU 推理 via WSL2 · GPU Inference via WSL2
 
 KTransformers 需要 Linux + CUDA。在 Windows 上，WSL2 提供带 GPU 透传的完整 Linux 内核 — Astra 在 WSL2 内与原生 Linux 运行一致。
