@@ -9,7 +9,7 @@
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org)
 [![Tests](https://img.shields.io/badge/tests-150%20passed-brightgreen)]()
 [![CI](https://github.com/qchauncey/astra/actions/workflows/ci.yml/badge.svg)](.github/workflows/ci.yml)
-[![Status](https://img.shields.io/badge/status-Phase%203%20in%20progress-yellow)]()
+[![Status](https://img.shields.io/badge/status-Phase%204%20complete%2C%20Phase%205%20in%20progress-blue)]()
 
 **Astra** is an open-source P2P distributed inference framework that runs **DeepSeek-V4-Flash (284B)** across a cluster of commodity PCs (e.g., RTX 5070 Ti, 16 GB VRAM each) by combining:
 
@@ -17,7 +17,7 @@
 - **[KTransformers](https://github.com/kvcache-ai/ktransformers)**-style heterogeneous GPU/CPU compute split
 - **[hivemind](https://github.com/learning-at-home/hivemind)** DHT for peer discovery and key-value storage
 
-> **Alpha.** Phase 1 & 2 (local + dual-node gRPC pipeline) are complete and tested. Phase 3 (full P2P network + API gateway) is in progress.
+> **Alpha.** Phase 1, 2 & 4 (local + dual-node gRPC pipeline + DP/TEE security hardening) are complete and tested. Phase 3 (full P2P network + API gateway) and Phase 5 (gRPC TLS + hivemind multi-machine DHT) are in progress.
 
 ---
 
@@ -305,7 +305,12 @@ astra/
 │   └── tensor_pack.py          # TensorPacket wire format v1
 ├── inference/
 │   ├── heterogeneous.py        # HeterogeneousEngine (GPU attn + CPU MoE)
-│   └── shared_expert_cache.py  # LRU expert cache with permanent pinning
+│   ├── shared_expert_cache.py  # LRU expert cache with permanent pinning
+│   └── differential_privacy.py # Differential privacy noise injection (ε/δ budget)
+├── tee/
+│   ├── __init__.py             # TEEBackend abstract interface
+│   ├── gramine.py              # Intel SGX via Gramine Library OS
+│   └── amd_sev.py              # AMD SEV-SNP confidential computing
 ├── routing/
 │   └── geo_router.py           # GeoAwareMoERouter (token-level dispatch)
 ├── rpc/
@@ -341,6 +346,9 @@ docs/
 | `astra.serialization.TensorPacket` | Binary wire format: hidden states + routing metadata, float16 |
 | `astra.inference.HeterogeneousEngine` | Attention on GPU stub · MoE FFN on CPU RAM |
 | `astra.inference.SharedExpertCache` | LRU cache; experts 0 & 1 pinned, never evicted |
+| `astra.inference.DPController` | Differential privacy: per-layer Gaussian/Laplace noise injection with ε/δ budget tracking |
+| `astra.tee.GramineBackend` | Intel SGX TEE: attestation, model sealing, secure execution via Gramine Library OS |
+| `astra.tee.SevBackend` | AMD SEV-SNP confidential computing: attestation, secure model loading |
 | `astra.routing.GeoAwareMoERouter` | Token-level `(token, expert_id) → best_node` via haversine RTT |
 | `astra.rpc.InferenceServer/Client` | gRPC pack → CRC32 verify → compute → deserialize loop |
 | `astra.rpc.KVCacheSender/Receiver` | Chunked KV tensor streaming between pipeline stages |
@@ -358,10 +366,22 @@ docs/
 | [docs/ROADMAP.md](docs/ROADMAP.md) | Phase-by-phase plan (Phase 1 ✓ · Phase 2 ✓ · Phase 3 in progress) |
 | [docs/TESTING.md](docs/TESTING.md) | Test strategy: 150 tests covered + pending hardware test checklist |
 | [docs/SECURITY.md](docs/SECURITY.md) | mTLS encryption, differential privacy, output tamper-proofing |
+| [docs/TEE.md](docs/TEE.md) | TEE deployment guide: Intel SGX (Gramine) & AMD SEV-SNP attestation flow |
 | [docs/FEASIBILITY.md](docs/FEASIBILITY.md) | Compute thresholds, geo micro-cluster tiers, bandwidth analysis |
 | [docs/COMPLIANCE.md](docs/COMPLIANCE.md) | License compliance, DeepSeek model terms, patent analysis |
 
 ---
+
+## Implementation Roadmap
+
+| Phase | Scope | Status |
+|-------|-------|--------|
+| **Phase 1** | Local heterogeneous single-node inference (NumPy stub + SharedExpertCache) | ✅ Complete |
+| **Phase 2** | LAN dual-node gRPC pipeline (pack → transmit → compute → receive loop) | ✅ Complete |
+| **Phase 3** | AstraDHT peer discovery, N-node orchestration, OpenAI API, KV-cache streaming | 🔄 In Progress |
+| **Phase 4** | Differential privacy (ε/δ budget, per-layer noise), TEE (Intel SGX + AMD SEV-SNP) | ✅ Complete |
+| **Phase 5** | gRPC TLS mutual auth + hivemind multi-machine DHT integration | 📋 Planned |
+| **Phase 6** | Next.js / Electron frontend portal, decentralized login, compute monitoring | 📋 Planned |
 
 ## Licensing
 
