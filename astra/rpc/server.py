@@ -146,7 +146,7 @@ class _InferenceServicer(pb2_grpc.InferenceServiceServicer):
     ) -> pb2.PingResponse:
         stats = self._engine.stats()
         with self._lock:
-            rc = self._request_count
+            _request_count = self._request_count
         return pb2.PingResponse(
             node_id=self._node_id,
             ready=True,

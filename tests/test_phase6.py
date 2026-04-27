@@ -24,8 +24,6 @@ Unit tests for Phase 6 API endpoints:
 
 import hashlib
 import hmac
-import json
-
 import pytest
 from starlette.testclient import TestClient
 
@@ -157,7 +155,7 @@ class TestLogin:
     def test_wrong_signature_rejected(self, client):
         cid = "contributor-3"
         # Get a real challenge
-        chal = client.post("/api/login/challenge", json={"contributor_id": cid}).json()
+        client.post("/api/login/challenge", json={"contributor_id": cid}).json()
 
         # But sign a *different* nonce
         fake_sig = hmac.new(cid.encode(), b"wrong-nonce-value", hashlib.sha256).hexdigest()

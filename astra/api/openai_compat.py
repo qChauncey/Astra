@@ -331,7 +331,7 @@ def create_app(
         for p in peers:
             # Attempt gRPC Ping via InferenceClient
             try:
-                from ..rpc.client import InferenceClient, PingResult
+                from ..rpc.client import InferenceClient
                 client = InferenceClient(target=p.address)
                 result = await asyncio.to_thread(client.ping)
                 nodes.append({
