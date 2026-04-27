@@ -7,9 +7,9 @@
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org)
-[![Tests](https://img.shields.io/badge/tests-274%20passed-brightgreen)]()
+[![Tests](https://img.shields.io/badge/tests-299%20passed-brightgreen)]()
 [![CI](https://github.com/qchauncey/astra/actions/workflows/ci.yml/badge.svg)](.github/workflows/ci.yml)
-[![Status](https://img.shields.io/badge/状态-Phase%204%20已完成%2C%20Phase%205%20进行中-blue)]()
+[![Status](https://img.shields.io/badge/状态-Phase%204--6%20已完成%2C%20Phase%205%20进行中-blue)]()
 
 **Astra** 是一个开源 P2P 分布式推理框架，能够将 **DeepSeek-V4-Flash（284B 参数）** 运行在由普通 PC 组成的集群上（例如配备 RTX 5070 Ti、16 GB 显存的设备）。其核心技术融合自：
 
@@ -17,7 +17,7 @@
 - **[KTransformers](https://github.com/kvcache-ai/ktransformers)** 的 GPU/CPU 异构计算引擎
 - **[hivemind](https://github.com/learning-at-home/hivemind)** DHT 协议，用于节点发现与键值存储
 
-> **当前状态：Alpha 阶段。** 阶段 1、2、4（本地单机 + 双节点 gRPC 流水线 + DP/TEE 安全加固）已完成并通过测试。阶段 3（完整 P2P 网络 + API 网关）正在推进中。阶段 5（gRPC TLS + hivemind 多机 DHT）进入实施阶段。
+> **当前状态：Alpha 阶段。** 阶段 1、2、4、6（本地单机 + 双节点 gRPC 流水线 + DP/TEE 安全加固 + 前端门户）已完成并通过测试。阶段 3（完整 P2P 网络 + API 网关）正在推进中。阶段 5（gRPC TLS + hivemind 多机 DHT）进入实施阶段。
 
 ---
 
@@ -342,14 +342,16 @@ astra/
 │   ├── dht.py                  # AstraDHT（hivemind 兼容节点发现）
 │   └── orchestrator.py         # PipelineOrchestrator（N 节点 DHT 动态串联）
 └── api/
-    └── openai_compat.py        # OpenAI 兼容 FastAPI 接口
+    ├── openai_compat.py        # OpenAI 兼容 FastAPI 接口
+    └── static/
+        └── index.html           # Phase 6 SPA 仪表盘（聊天、监控、身份、收益）
 
 mock_pipeline.py                # 阶段 1 & 2 本地模拟测试入口
 scripts/
 ├── run_node.py                 # 生产节点启动 CLI
 ├── run_cluster.py              # 单机多节点集群启动器（Phase 3 基础设施验证）
 └── check_env.py                # 环境依赖检查工具（含节点角色资格输出）
-tests/                          # 274 个 pytest 测试（全部通过）
+tests/                          # 299 个 pytest 测试（全部通过）
 .github/workflows/ci.yml        # CI：Python 3.10/3.11/3.12 矩阵 + lint
 docs/
 ├── ARCHITECTURE.md             # 详细系统设计与传输格式规范
@@ -383,7 +385,7 @@ docs/
 |-----|-----|
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 系统设计、数据流、传输格式规范 |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | 分阶段实施计划 |
-| [docs/TESTING.md](docs/TESTING.md) | 测试方案：已覆盖 274 项 + 待完成测试清单（含不可自动化的硬件测试项） |
+| [docs/TESTING.md](docs/TESTING.md) | 测试方案：已覆盖 299 项 + 待完成测试清单（含不可自动化的硬件测试项） |
 | [docs/SECURITY.md](docs/SECURITY.md) | 节点间加密（mTLS）、隐藏状态隐私保护、输出完整性验证、差分隐私 |
 | [docs/TEE.md](docs/TEE.md) | TEE 部署指南：Intel SGX（Gramine）与 AMD SEV-SNP 远程证明流程 |
 | [docs/FEASIBILITY.md](docs/FEASIBILITY.md) | 算力门槛、地理微集群划分规则、带宽需求、与同类项目对比 |
@@ -400,7 +402,7 @@ docs/
 | **Phase 3** | AstraDHT 节点发现、N 节点编排、OpenAI API、KV 缓存流传输 | 🔄 进行中 |
 | **Phase 4** | 差分隐私（ε/δ 预算 + 逐层噪声）+ TEE（Intel SGX + AMD SEV-SNP） | ✅ 完成 |
 | **Phase 5** | gRPC TLS 安全认证 + hivemind 多机 DHT 集成 | 🔄 进行中 |
-| **Phase 6** | Next.js / Electron 前端门户，去中心化登录，算力监控 | 📋 规划中 |
+| **Phase 6** | SPA 仪表盘（聊天、监控、身份、收益），去中心化挑战-应答登录，实时监控，贡献者代币核算 | ✅ 完成 |
 
 ---
 

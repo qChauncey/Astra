@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Astra</title>
+<title>Astra — Decentralized Inference</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -25,7 +25,6 @@
 
   html, body { height: 100%; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: var(--bg); color: var(--text); font-size: 14px; }
 
-  /* ── Layout ── */
   #app { display: flex; height: 100vh; overflow: hidden; }
 
   /* ── Sidebar ── */
@@ -37,272 +36,222 @@
     flex-direction: column;
     flex-shrink: 0;
   }
-
   #logo {
-    display: flex;
-    align-items: center;
-    gap: 10px;
+    display: flex; align-items: center; gap: 10px;
     padding: 18px 16px 14px;
     border-bottom: 1px solid var(--border);
   }
   #logo svg { width: 28px; height: 28px; }
   #logo-text { font-size: 18px; font-weight: 700; letter-spacing: -0.3px; }
   #mode-badge {
-    margin-left: auto;
-    font-size: 10px;
-    font-weight: 600;
-    padding: 2px 7px;
-    border-radius: 20px;
-    background: var(--accent);
-    color: #fff;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
+    margin-left: auto; font-size: 10px; font-weight: 600;
+    padding: 2px 7px; border-radius: 20px;
+    background: var(--accent); color: #fff;
+    text-transform: uppercase; letter-spacing: 0.5px;
   }
   #mode-badge.offline { background: var(--yellow); color: #000; }
 
-  /* My node card */
-  #my-node-card {
-    margin: 12px;
-    padding: 12px;
-    background: var(--surface2);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
+  /* Nav tabs */
+  #nav { display: flex; flex-direction: column; padding: 8px; gap: 2px; }
+  .nav-btn {
+    display: flex; align-items: center; gap: 8px;
+    padding: 10px 12px; border-radius: 8px;
+    background: transparent; border: none; color: var(--text-dim);
+    font-size: 13px; cursor: pointer; text-align: left;
+    transition: background 0.15s, color 0.15s;
   }
-  #my-node-card .label { font-size: 10px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 6px; }
-  #my-node-name { font-weight: 600; font-size: 13px; margin-bottom: 4px; }
-  #my-node-layers { font-size: 12px; color: var(--text-dim); }
-  .layer-bar { height: 4px; background: var(--border); border-radius: 2px; margin-top: 8px; overflow: hidden; }
-  .layer-fill { height: 100%; background: var(--accent); border-radius: 2px; transition: width 0.4s; }
+  .nav-btn:hover { background: var(--surface2); color: var(--text); }
+  .nav-btn.active { background: var(--accent); color: #fff; }
+  .nav-btn svg { width: 16px; height: 16px; fill: currentColor; flex-shrink: 0; }
+  .nav-badge {
+    margin-left: auto; font-size: 10px; padding: 1px 6px;
+    border-radius: 10px; background: var(--accent); color: #fff;
+  }
 
-  /* Peer list */
+  /* Peer list in sidebar */
   #peer-section {
-    flex: 1;
-    overflow-y: auto;
-    padding: 0 12px 12px;
+    flex: 1; overflow-y: auto; padding: 0 12px 12px;
   }
   #peer-section-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
+    display: flex; align-items: center; justify-content: space-between;
     padding: 10px 0 6px;
-    font-size: 10px;
-    text-transform: uppercase;
-    letter-spacing: 0.8px;
-    color: var(--text-dim);
+    font-size: 10px; text-transform: uppercase; letter-spacing: 0.8px; color: var(--text-dim);
   }
   #peer-count { font-size: 11px; }
-
   .peer-card {
-    padding: 10px;
-    background: var(--surface2);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    margin-bottom: 6px;
+    padding: 8px 10px; background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 8px; margin-bottom: 5px; font-size: 12px;
   }
-  .peer-card-top { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
+  .peer-card-top { display: flex; align-items: center; gap: 6px; margin-bottom: 3px; }
   .peer-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); flex-shrink: 0; }
   .peer-dot.slow { background: var(--yellow); }
   .peer-dot.down { background: var(--red); }
-  .peer-name { font-size: 12px; font-weight: 600; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .peer-latency { font-size: 11px; color: var(--text-dim); }
+  .peer-name { font-size: 12px; font-weight: 600; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .peer-layers-text { font-size: 11px; color: var(--text-dim); }
-  .peer-card .layer-bar { margin-top: 6px; }
-
+  .peer-util { display: flex; gap: 8px; margin-top: 4px; font-size: 10px; color: var(--text-dim); }
   #no-peers { color: var(--text-dim); font-size: 12px; text-align: center; padding: 20px 0; }
 
-  /* ── Main chat area ── */
+  /* ── Main area ── */
   #main {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
+    flex: 1; display: flex; flex-direction: column; overflow: hidden;
   }
-
-  /* Topbar */
   #topbar {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 12px 20px;
-    border-bottom: 1px solid var(--border);
-    background: var(--surface);
+    display: flex; align-items: center; gap: 10px;
+    padding: 12px 20px; border-bottom: 1px solid var(--border); background: var(--surface);
   }
-  #model-selector {
-    background: var(--surface2);
-    border: 1px solid var(--border);
-    color: var(--text);
-    padding: 5px 10px;
-    border-radius: 6px;
-    font-size: 13px;
-    cursor: pointer;
-  }
-  #status-indicator {
-    display: flex;
-    align-items: center;
-    gap: 5px;
-    font-size: 12px;
-    color: var(--text-dim);
-    margin-left: auto;
-  }
+  #page-title { font-size: 16px; font-weight: 600; }
+  #status-indicator { display: flex; align-items: center; gap: 5px; margin-left: auto; font-size: 12px; color: var(--text-dim); }
   #status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); }
   #status-dot.error { background: var(--red); }
   #status-dot.loading { background: var(--yellow); animation: pulse 1s infinite; }
-
   @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
 
-  /* Stub warning */
+  /* Pages */
+  .page { display: none; flex: 1; overflow-y: auto; }
+  .page.active { display: flex; flex-direction: column; }
+
+  /* ── Chat page ── */
   #stub-banner {
-    background: rgba(245, 166, 35, 0.1);
-    border-bottom: 1px solid rgba(245, 166, 35, 0.3);
-    padding: 6px 20px;
-    font-size: 12px;
-    color: var(--yellow);
-    display: flex;
-    align-items: center;
-    gap: 6px;
+    background: rgba(245,166,35,0.1); border-bottom: 1px solid rgba(245,166,35,0.3);
+    padding: 6px 20px; font-size: 12px; color: var(--yellow);
+    display: flex; align-items: center; gap: 6px;
   }
-
-  /* Messages */
   #messages {
-    flex: 1;
-    overflow-y: auto;
-    padding: 24px 0;
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
+    flex: 1; overflow-y: auto; padding: 24px 0; display: flex; flex-direction: column; gap: 4px;
   }
-
   #welcome {
-    max-width: 560px;
-    margin: auto;
-    text-align: center;
-    padding: 40px 24px;
+    max-width: 560px; margin: auto; text-align: center; padding: 40px 24px;
   }
   #welcome h1 { font-size: 28px; font-weight: 700; margin-bottom: 10px; }
   #welcome p { color: var(--text-dim); line-height: 1.6; margin-bottom: 24px; }
   .starter-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
   .starter-btn {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 12px;
-    text-align: left;
-    color: var(--text);
-    cursor: pointer;
-    font-size: 12px;
-    line-height: 1.4;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+    padding: 12px; text-align: left; color: var(--text); cursor: pointer; font-size: 12px; line-height: 1.4;
     transition: border-color 0.15s, background 0.15s;
   }
   .starter-btn:hover { border-color: var(--accent); background: var(--surface2); }
   .starter-btn strong { display: block; font-size: 13px; margin-bottom: 2px; }
 
-  .msg-row {
-    display: flex;
-    padding: 6px 24px;
-    gap: 12px;
-    max-width: 860px;
-    width: 100%;
-    margin: 0 auto;
-  }
+  .msg-row { display: flex; padding: 6px 24px; gap: 12px; max-width: 860px; width: 100%; margin: 0 auto; }
   .msg-row.user { flex-direction: row-reverse; }
-
   .avatar {
-    width: 30px; height: 30px;
-    border-radius: 50%;
-    flex-shrink: 0;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 12px; font-weight: 700;
+    width: 30px; height: 30px; border-radius: 50%; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700;
   }
   .avatar.user { background: var(--accent); }
   .avatar.assistant { background: var(--surface2); border: 1px solid var(--border); }
-
   .bubble {
-    max-width: 72%;
-    padding: 11px 15px;
-    border-radius: 14px;
-    line-height: 1.6;
-    font-size: 14px;
-    white-space: pre-wrap;
-    word-break: break-word;
+    max-width: 72%; padding: 11px 15px; border-radius: 14px; line-height: 1.6; font-size: 14px;
+    white-space: pre-wrap; word-break: break-word;
   }
-  .bubble.user {
-    background: var(--accent);
-    color: #fff;
-    border-bottom-right-radius: 4px;
-  }
-  .bubble.assistant {
-    background: var(--surface2);
-    border: 1px solid var(--border);
-    border-bottom-left-radius: 4px;
-  }
+  .bubble.user { background: var(--accent); color: #fff; border-bottom-right-radius: 4px; }
+  .bubble.assistant { background: var(--surface2); border: 1px solid var(--border); border-bottom-left-radius: 4px; }
 
   .typing-dot {
-    display: inline-block;
-    width: 6px; height: 6px;
-    border-radius: 50%;
-    background: var(--text-dim);
-    margin: 0 1px;
-    animation: typing 1.2s infinite;
+    display: inline-block; width: 6px; height: 6px; border-radius: 50%;
+    background: var(--text-dim); margin: 0 1px; animation: typing 1.2s infinite;
   }
   .typing-dot:nth-child(2) { animation-delay: 0.2s; }
   .typing-dot:nth-child(3) { animation-delay: 0.4s; }
   @keyframes typing { 0%,80%,100%{transform:translateY(0)} 40%{transform:translateY(-5px)} }
 
-  /* Input bar */
   #input-area {
-    border-top: 1px solid var(--border);
-    padding: 16px 24px;
-    background: var(--surface);
+    border-top: 1px solid var(--border); padding: 16px 24px; background: var(--surface);
   }
   #input-wrap {
-    max-width: 860px;
-    margin: 0 auto;
-    display: flex;
-    align-items: flex-end;
-    gap: 10px;
-    background: var(--surface2);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 10px 12px;
-    transition: border-color 0.15s;
+    max-width: 860px; margin: 0 auto;
+    display: flex; align-items: flex-end; gap: 10px;
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 12px; padding: 10px 12px; transition: border-color 0.15s;
   }
   #input-wrap:focus-within { border-color: var(--accent); }
   #user-input {
-    flex: 1;
-    background: transparent;
-    border: none;
-    outline: none;
-    color: var(--text);
-    font-size: 14px;
-    resize: none;
-    max-height: 180px;
-    line-height: 1.5;
-    font-family: inherit;
+    flex: 1; background: transparent; border: none; outline: none;
+    color: var(--text); font-size: 14px; resize: none; max-height: 180px; line-height: 1.5; font-family: inherit;
   }
   #user-input::placeholder { color: var(--text-dim); }
   #send-btn {
-    width: 34px; height: 34px;
-    border-radius: 8px;
-    background: var(--accent);
-    border: none;
-    cursor: pointer;
-    display: flex; align-items: center; justify-content: center;
-    flex-shrink: 0;
-    transition: background 0.15s;
+    width: 34px; height: 34px; border-radius: 8px; background: var(--accent);
+    border: none; cursor: pointer; display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0; transition: background 0.15s;
   }
   #send-btn:hover { background: var(--accent2); }
   #send-btn:disabled { background: var(--border); cursor: not-allowed; }
   #send-btn svg { width: 16px; height: 16px; fill: #fff; }
-
   #input-footer {
-    max-width: 860px;
-    margin: 6px auto 0;
-    font-size: 11px;
-    color: var(--text-dim);
-    text-align: center;
+    max-width: 860px; margin: 6px auto 0; font-size: 11px; color: var(--text-dim); text-align: center;
   }
 
-  /* Scrollbar */
+  /* ── Monitor page ── */
+  #monitor-grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 14px; padding: 20px;
+  }
+  .monitor-card {
+    background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px;
+  }
+  .monitor-card h3 { font-size: 14px; margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
+  .monitor-card .dot-reachable { width: 8px; height: 8px; border-radius: 50%; background: var(--green); flex-shrink: 0; }
+  .monitor-card .dot-unreachable { width: 8px; height: 8px; border-radius: 50%; background: var(--red); flex-shrink: 0; }
+  .monitor-card .detail { font-size: 12px; color: var(--text-dim); line-height: 1.8; }
+  .util-bar-wrap { display: flex; align-items: center; gap: 8px; margin: 4px 0; }
+  .util-bar-wrap .label { font-size: 11px; width: 55px; flex-shrink: 0; }
+  .util-bar { flex: 1; height: 8px; background: var(--border); border-radius: 4px; overflow: hidden; }
+  .util-fill { height: 100%; border-radius: 4px; transition: width 0.5s; }
+  .util-fill.gpu { background: var(--accent); }
+  .util-fill.cpu { background: var(--yellow); }
+
+  .monitor-summary {
+    display: flex; gap: 16px; padding: 0 20px 10px; flex-wrap: wrap;
+  }
+  .summary-card {
+    background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 14px 20px; min-width: 140px; text-align: center;
+  }
+  .summary-card .val { font-size: 28px; font-weight: 700; }
+  .summary-card .val.green { color: var(--green); }
+  .summary-card .lbl { font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; }
+
+  /* ── Login page ── */
+  .form-container {
+    max-width: 420px; margin: 60px auto; padding: 0 20px;
+  }
+  .form-card {
+    background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); padding: 24px;
+  }
+  .form-card h2 { font-size: 20px; margin-bottom: 8px; }
+  .form-card p { font-size: 13px; color: var(--text-dim); margin-bottom: 20px; }
+  .form-group { margin-bottom: 16px; }
+  .form-group label { display: block; font-size: 12px; font-weight: 600; margin-bottom: 6px; }
+  .form-group input {
+    width: 100%; padding: 10px 12px; background: var(--bg); border: 1px solid var(--border);
+    border-radius: 6px; color: var(--text); font-size: 14px; font-family: inherit;
+  }
+  .form-group input:focus { outline: none; border-color: var(--accent); }
+  .form-group input::placeholder { color: var(--text-dim); }
+  .btn-primary {
+    width: 100%; padding: 10px; background: var(--accent); color: #fff;
+    border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer;
+    transition: background 0.15s;
+  }
+  .btn-primary:hover { background: var(--accent2); }
+  .btn-primary:disabled { background: var(--border); cursor: not-allowed; }
+  .info-box {
+    padding: 12px; border-radius: 6px; margin-top: 12px; font-size: 13px; line-height: 1.5;
+  }
+  .info-box.success { background: rgba(62,207,142,0.1); border: 1px solid rgba(62,207,142,0.3); color: var(--green); }
+  .info-box.error { background: rgba(224,92,92,0.1); border: 1px solid rgba(224,92,92,0.3); color: var(--red); }
+
+  /* ── Earnings page ── */
+  #earnings-table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+  #earnings-table th, #earnings-table td {
+    padding: 12px 16px; text-align: left; border-bottom: 1px solid var(--border); font-size: 13px;
+  }
+  #earnings-table th { color: var(--text-dim); font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; }
+  #earnings-table td { color: var(--text); }
+  .rank { font-weight: 700; color: var(--accent); }
+
   ::-webkit-scrollbar { width: 5px; }
   ::-webkit-scrollbar-track { background: transparent; }
   ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
@@ -323,12 +272,24 @@
       <span id="mode-badge">P2P</span>
     </div>
 
-    <div id="my-node-card">
-      <div class="label">This Node</div>
-      <div id="my-node-name">Loading&hellip;</div>
-      <div id="my-node-layers">Layers &mdash;</div>
-      <div class="layer-bar"><div class="layer-fill" id="my-layer-fill" style="width:0%"></div></div>
-    </div>
+    <nav id="nav">
+      <button class="nav-btn active" data-page="chat">
+        <svg viewBox="0 0 16 16"><rect x="1" y="2" width="14" height="11" rx="1.5" fill="currentColor"/><polygon points="5,8 7,10 10,6" fill="none" stroke="var(--bg)" stroke-width="1.5"/></svg>
+        Chat
+      </button>
+      <button class="nav-btn" data-page="monitor">
+        <svg viewBox="0 0 16 16"><rect x="1" y="1" width="14" height="14" rx="1" fill="none" stroke="currentColor" stroke-width="1.5"/><rect x="3" y="10" width="2.5" height="3" fill="currentColor"/><rect x="6.75" y="7" width="2.5" height="6" fill="currentColor"/><rect x="10.5" y="4" width="2.5" height="9" fill="currentColor"/></svg>
+        Monitor
+      </button>
+      <button class="nav-btn" data-page="login">
+        <svg viewBox="0 0 16 16"><circle cx="8" cy="5" r="3" fill="currentColor"/><path d="M2 15c0-3.3 2.7-6 6-6s6 2.7 6 6" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>
+        Identity
+      </button>
+      <button class="nav-btn" data-page="earnings">
+        <svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-width="1.5"/><text x="8" y="11.5" text-anchor="middle" font-size="10" font-weight="700" fill="currentColor">$</text></svg>
+        Earnings
+      </button>
+    </nav>
 
     <div id="peer-section">
       <div id="peer-section-header">
@@ -342,56 +303,133 @@
   <!-- ── Main ── -->
   <main id="main">
     <div id="topbar">
-      <select id="model-selector">
-        <option value="deepseek-v4-flash">DeepSeek-V4-Flash 284B</option>
-      </select>
+      <span id="page-title">Chat</span>
       <div id="status-indicator">
         <div id="status-dot" class="loading"></div>
         <span id="status-text">Connecting&hellip;</span>
       </div>
     </div>
 
-    <div id="stub-banner">
-      &#9888; Inference stub active &mdash; responses are placeholder text (numpy random). Real model requires GPU + weights.
+    <!-- Chat page -->
+    <div class="page active" id="page-chat">
+      <div id="stub-banner">&#9888; Inference stub active &mdash; responses are placeholder text (numpy random). Real model requires GPU + weights.</div>
+      <div id="messages">
+        <div id="welcome">
+          <h1>Astra</h1>
+          <p>Distributed AI inference &mdash; powered by your collective hardware.<br/>Start a conversation below or pick a prompt.</p>
+          <div class="starter-grid">
+            <button class="starter-btn" onclick="useStarter(this)"><strong>Explain distributed inference</strong>How does Astra split a model across machines?</button>
+            <button class="starter-btn" onclick="useStarter(this)"><strong>Check cluster status</strong>How many nodes are active right now?</button>
+            <button class="starter-btn" onclick="useStarter(this)"><strong>What is DeepSeek-V4-Flash?</strong>Tell me about the model this cluster runs.</button>
+            <button class="starter-btn" onclick="useStarter(this)"><strong>Hello!</strong>Just say hi and introduce yourself.</button>
+          </div>
+        </div>
+      </div>
+      <div id="input-area">
+        <div id="input-wrap">
+          <textarea id="user-input" rows="1" placeholder="Message Astra&hellip;" maxlength="4096"></textarea>
+          <button id="send-btn" onclick="sendMessage()" title="Send">
+            <svg viewBox="0 0 16 16"><path d="M1.5 1.5l13 6.5-13 6.5V9.5l9-3-9-3V1.5z"/></svg>
+          </button>
+        </div>
+        <div id="input-footer">Responses generated by the Astra P2P pipeline &middot; <span id="footer-mode">P2P mode</span></div>
+      </div>
     </div>
 
-    <div id="messages">
-      <div id="welcome">
-        <h1>Astra</h1>
-        <p>Distributed AI inference &mdash; powered by your collective hardware.<br/>Start a conversation below or pick a prompt.</p>
-        <div class="starter-grid">
-          <button class="starter-btn" onclick="useStarter(this)"><strong>Explain distributed inference</strong>How does Astra split a model across machines?</button>
-          <button class="starter-btn" onclick="useStarter(this)"><strong>Check cluster status</strong>How many nodes are active right now?</button>
-          <button class="starter-btn" onclick="useStarter(this)"><strong>What is DeepSeek-V4-Flash?</strong>Tell me about the model this cluster runs.</button>
-          <button class="starter-btn" onclick="useStarter(this)"><strong>Hello!</strong>Just say hi and introduce yourself.</button>
+    <!-- Monitor page -->
+    <div class="page" id="page-monitor">
+      <div class="monitor-summary" id="monitor-summary"></div>
+      <div id="monitor-grid"></div>
+    </div>
+
+    <!-- Login page -->
+    <div class="page" id="page-login">
+      <div class="form-container">
+        <div class="form-card">
+          <h2>Decentralized Identity</h2>
+          <p>Log in with your contributor ID to access token-based earnings.</p>
+          <div class="form-group">
+            <label for="contributor-id">Contributor ID</label>
+            <input type="text" id="contributor-id" placeholder="e.g. my-node-1" />
+          </div>
+          <div class="form-group">
+            <label for="challenge-nonce">Challenge Nonce</label>
+            <input type="text" id="challenge-nonce" readonly placeholder="Click 'Request Challenge'" />
+          </div>
+          <div style="display:flex;gap:8px;margin-bottom:12px">
+            <button class="btn-primary" onclick="requestChallenge()" style="flex:1">Request Challenge</button>
+            <button class="btn-primary" onclick="doLogin()" style="flex:1">Sign & Login</button>
+          </div>
+          <div id="login-result"></div>
         </div>
       </div>
     </div>
 
-    <div id="input-area">
-      <div id="input-wrap">
-        <textarea id="user-input" rows="1" placeholder="Message Astra&hellip;" maxlength="4096"></textarea>
-        <button id="send-btn" onclick="sendMessage()" title="Send">
-          <svg viewBox="0 0 16 16"><path d="M1.5 1.5l13 6.5-13 6.5V9.5l9-3-9-3V1.5z"/></svg>
-        </button>
+    <!-- Earnings page -->
+    <div class="page" id="page-earnings">
+      <div style="max-width:860px;margin:20px auto;padding:0 20px;width:100%">
+        <table id="earnings-table">
+          <thead><tr><th>#</th><th>Contributor</th><th>Tokens Earned</th></tr></thead>
+          <tbody id="earnings-body"><tr><td colspan="3" style="text-align:center;color:var(--text-dim)">No earnings data yet</td></tr></tbody>
+        </table>
       </div>
-      <div id="input-footer">Responses generated by the Astra P2P pipeline &middot; <span id="footer-mode">P2P mode</span></div>
     </div>
   </main>
 
 </div>
 
 <script>
-// ── State ──────────────────────────────────────────────────────────────────
+// ════════════════════════════════════════════════════════════════════════════
+// Application State
+// ════════════════════════════════════════════════════════════════════════════
 var appState = {
   myNode: null,
   peers: [],
   totalLayers: 61,
   messages: [],
-  streaming: false
+  streaming: false,
+  sessionToken: null,
+  contributorId: null,
+  currentPage: "chat",
+  pollIntervals: {}
 };
 
-// ── Boot ───────────────────────────────────────────────────────────────────
+// ════════════════════════════════════════════════════════════════════════════
+// Navigation
+// ════════════════════════════════════════════════════════════════════════════
+function navigateTo(page) {
+  appState.currentPage = page;
+  document.querySelectorAll(".nav-btn").forEach(function(b) {
+    b.classList.toggle("active", b.dataset.page === page);
+  });
+  document.querySelectorAll(".page").forEach(function(p) {
+    p.classList.toggle("active", p.id === "page-" + page);
+  });
+  document.getElementById("page-title").textContent =
+    page === "chat" ? "Chat" :
+    page === "monitor" ? "Cluster Monitor" :
+    page === "login" ? "Identity" : "Earnings";
+
+  // Start/stop page-specific polling
+  clearAllPolling();
+  if (page === "monitor") { pollMonitor(); appState.pollIntervals.monitor = setInterval(pollMonitor, 5000); }
+  if (page === "earnings") { pollEarnings(); appState.pollIntervals.earnings = setInterval(pollEarnings, 8000); }
+}
+
+function clearAllPolling() {
+  for (var k in appState.pollIntervals) {
+    clearInterval(appState.pollIntervals[k]);
+    delete appState.pollIntervals[k];
+  }
+}
+
+document.querySelectorAll(".nav-btn").forEach(function(btn) {
+  btn.addEventListener("click", function() { navigateTo(btn.dataset.page); });
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// Boot
+// ════════════════════════════════════════════════════════════════════════════
 function boot() {
   fetchMyNode();
   fetchPeers();
@@ -405,14 +443,18 @@ function boot() {
 function fetchMyNode() {
   fetch("/api/my-node")
     .then(function(r) { return r.ok ? r.json() : null; })
-    .then(function(d) { if (d) { appState.myNode = d; appState.totalLayers = d.total_layers || 61; renderMyNode(d); } })
+    .then(function(d) {
+      if (d) { appState.myNode = d; appState.totalLayers = d.total_layers || 61; renderMyNode(d); }
+    })
     .catch(function() {});
 }
 
 function fetchPeers() {
   fetch("/api/peers")
     .then(function(r) { return r.ok ? r.json() : null; })
-    .then(function(d) { if (d) { appState.peers = d.peers || []; renderPeers(appState.peers); } })
+    .then(function(d) {
+      if (d) { appState.peers = d.peers || []; renderPeers(appState.peers); }
+    })
     .catch(function() {});
 }
 
@@ -422,46 +464,37 @@ function fetchHealth() {
     .catch(function() { setStatus("error", "Unreachable"); });
 }
 
-// ── Render sidebar ─────────────────────────────────────────────────────────
+// ════════════════════════════════════════════════════════════════════════════
+// Sidebar rendering
+// ════════════════════════════════════════════════════════════════════════════
 function renderMyNode(d) {
-  document.getElementById("my-node-name").textContent = d.node_id;
-  document.getElementById("my-node-layers").textContent =
-    "Layers " + d.layer_start + "–" + d.layer_end + " of " + d.total_layers;
-  var pct = Math.round(((d.layer_end - d.layer_start) / d.total_layers) * 100);
-  document.getElementById("my-layer-fill").style.width = pct + "%";
-
   var badge = document.getElementById("mode-badge");
   badge.textContent = d.mode === "offline" ? "Offline" : "P2P";
   badge.className = d.mode === "offline" ? "offline" : "";
-  document.getElementById("footer-mode").textContent =
-    d.mode === "offline" ? "Single-machine mode" : "P2P mode";
+  var footer = document.getElementById("footer-mode");
+  if (footer) footer.textContent = d.mode === "offline" ? "Single-machine mode" : "P2P mode";
 }
 
 function renderPeers(peers) {
   document.getElementById("peer-count").textContent = peers.length;
   var list = document.getElementById("peer-list");
-
   if (peers.length === 0) {
     list.innerHTML = '<div id="no-peers">No peers discovered yet</div>';
-    setStatus("ok", "Standalone");
     return;
   }
-
   setStatus("ok", peers.length + " peer" + (peers.length !== 1 ? "s" : "") + " online");
   var html = "";
   for (var i = 0; i < peers.length; i++) {
     var p = peers[i];
-    var layers = p.layer_start + "–" + p.layer_end;
+    var layers = p.layer_start + "\u2013" + p.layer_end;
     var pct = Math.round(((p.layer_end - p.layer_start) / appState.totalLayers) * 100);
     var dotClass = (p._latency_ms != null && p._latency_ms >= 50) ? "slow" : "";
-    var latStr = p._latency_ms != null ? p._latency_ms + "ms" : "—";
     html += '<div class="peer-card">' +
       '<div class="peer-card-top">' +
         '<div class="peer-dot ' + dotClass + '"></div>' +
         '<span class="peer-name">' + esc(p.node_id) + '</span>' +
-        '<span class="peer-latency">' + latStr + '</span>' +
       '</div>' +
-      '<div class="peer-layers-text">Layers ' + esc(layers) + ' · ' + esc(p.geo_region || "—") + '</div>' +
+      '<div class="peer-layers-text">Layers ' + esc(layers) + ' \u00b7 ' + esc(p.geo_region || "\u2014") + '</div>' +
       '<div class="layer-bar"><div class="layer-fill" style="width:' + pct + '%"></div></div>' +
     '</div>';
   }
@@ -474,7 +507,155 @@ function setStatus(st, text) {
   document.getElementById("status-text").textContent = text;
 }
 
-// ── Chat ───────────────────────────────────────────────────────────────────
+// ════════════════════════════════════════════════════════════════════════════
+// MONITOR page
+// ════════════════════════════════════════════════════════════════════════════
+function pollMonitor() {
+  fetch("/api/monitor")
+    .then(function(r) { return r.ok ? r.json() : null; })
+    .then(renderMonitor).catch(function() {});
+}
+
+function renderMonitor(data) {
+  if (!data) return;
+
+  var nodes = data.nodes || [];
+  var reachable = nodes.filter(function(n) { return n.reachable; }).length;
+  var total = nodes.length;
+  var avgGpu = 0, avgCpu = 0;
+  if (reachable > 0) {
+    avgGpu = nodes.reduce(function(s, n) { return s + (n.gpu_util || 0); }, 0) / reachable;
+    avgCpu = nodes.reduce(function(s, n) { return s + (n.cpu_util || 0); }, 0) / reachable;
+  }
+
+  document.getElementById("monitor-summary").innerHTML =
+    '<div class="summary-card"><div class="val green">' + reachable + '</div><div class="lbl">Reachable</div></div>' +
+    '<div class="summary-card"><div class="val">' + total + '</div><div class="lbl">Total Peers</div></div>' +
+    '<div class="summary-card"><div class="val">' + (avgGpu * 100).toFixed(0) + '%</div><div class="lbl">Avg GPU Util</div></div>' +
+    '<div class="summary-card"><div class="val">' + (avgCpu * 100).toFixed(0) + '%</div><div class="lbl">Avg CPU Util</div></div>';
+
+  var grid = document.getElementById("monitor-grid");
+  if (nodes.length === 0) {
+    grid.innerHTML = '<div style="padding:20px;color:var(--text-dim)">No peers registered in DHT. Start at least one node to see monitoring data.</div>';
+    return;
+  }
+
+  var html = "";
+  for (var i = 0; i < nodes.length; i++) {
+    var n = nodes[i];
+    var dotClass = n.reachable ? "dot-reachable" : "dot-unreachable";
+    var gpuPct = Math.round((n.gpu_util || 0) * 100);
+    var cpuPct = Math.round((n.cpu_util || 0) * 100);
+    html += '<div class="monitor-card">' +
+      '<h3><div class="' + dotClass + '"></div>' + esc(n.node_id) + '</h3>' +
+      '<div class="detail">' +
+        'Region: ' + esc(n.geo_region || "\u2014") + '<br>' +
+        'Layers: ' + n.layer_start + '\u2013' + n.layer_end + '<br>' +
+        'Backend: ' + esc(n.backend || "\u2014") + '<br>' +
+        'Expert shards: ' + (n.expert_shards || []).length + '<br>' +
+        'Status: ' + (n.ready ? "Ready" : "Not ready") +
+      '</div>' +
+      '<div class="util-bar-wrap"><span class="label">GPU</span><div class="util-bar"><div class="util-fill gpu" style="width:' + gpuPct + '%"></div></div><span style="font-size:11px">' + gpuPct + '%</span></div>' +
+      '<div class="util-bar-wrap"><span class="label">CPU</span><div class="util-bar"><div class="util-fill cpu" style="width:' + cpuPct + '%"></div></div><span style="font-size:11px">' + cpuPct + '%</span></div>' +
+    '</div>';
+  }
+  grid.innerHTML = html;
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// LOGIN page
+// ════════════════════════════════════════════════════════════════════════════
+function requestChallenge() {
+  var cid = document.getElementById("contributor-id").value.trim();
+  if (!cid) { showLoginResult("Enter a contributor ID first.", "error"); return; }
+
+  fetch("/api/login/challenge", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ contributor_id: cid })
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(d) {
+    if (d.error) { showLoginResult(d.error, "error"); return; }
+    document.getElementById("challenge-nonce").value = d.nonce;
+    computeSignature(cid, d.nonce).then(function(sig) {
+      appState._pendingSignature = sig;
+      appState._pendingCid = cid;
+      showLoginResult("Challenge received. Click 'Sign & Login' to authenticate.", "success");
+    });
+  })
+  .catch(function(e) { showLoginResult("Network error: " + e.message, "error"); });
+}
+
+function computeSignature(id, nonce) {
+  var enc = new TextEncoder();
+  var keyData = enc.encode(id);
+  var msgData = enc.encode(nonce);
+  return crypto.subtle.importKey("raw", keyData, { name: "HMAC", hash: "SHA-256" }, false, ["sign"])
+    .then(function(key) {
+      return crypto.subtle.sign("HMAC", key, msgData);
+    })
+    .then(function(sig) {
+      return Array.from(new Uint8Array(sig)).map(function(b) { return b.toString(16).padStart(2, "0"); }).join("");
+    });
+}
+
+function doLogin() {
+  var cid = appState._pendingCid || document.getElementById("contributor-id").value.trim();
+  var sig = appState._pendingSignature;
+  if (!cid || !sig) { showLoginResult("Request a challenge first.", "error"); return; }
+
+  fetch("/api/login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ contributor_id: cid, signature: sig })
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(d) {
+    if (d.error) { showLoginResult(d.error, "error"); return; }
+    appState.sessionToken = d.token;
+    appState.contributorId = d.contributor_id;
+    showLoginResult("Logged in as <strong>" + esc(d.contributor_id) + "</strong>. Token: " + d.token_hash + "<br/>Expires: " + new Date(d.expires_at * 1000).toLocaleString(), "success");
+  })
+  .catch(function(e) { showLoginResult("Network error: " + e.message, "error"); });
+}
+
+function showLoginResult(msg, type) {
+  var el = document.getElementById("login-result");
+  el.innerHTML = '<div class="info-box ' + type + '">' + msg + '</div>';
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// EARNINGS page
+// ════════════════════════════════════════════════════════════════════════════
+function pollEarnings() {
+  fetch("/api/earnings")
+    .then(function(r) { return r.ok ? r.json() : null; })
+    .then(renderEarnings).catch(function() {});
+}
+
+function renderEarnings(data) {
+  if (!data) return;
+  var items = data.contributors || [];
+  var tbody = document.getElementById("earnings-body");
+  if (items.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;color:var(--text-dim)">No earnings data yet</td></tr>';
+    return;
+  }
+  var html = "";
+  for (var i = 0; i < items.length; i++) {
+    html += '<tr>' +
+      '<td class="rank">' + (i + 1) + '</td>' +
+      '<td>' + esc(items[i].contributor_id) + '</td>' +
+      '<td>' + items[i].earned.toFixed(6) + '</td>' +
+    '</tr>';
+  }
+  tbody.innerHTML = html;
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// CHAT page
+// ════════════════════════════════════════════════════════════════════════════
 function useStarter(btn) {
   var strong = btn.querySelector("strong");
   document.getElementById("user-input").value = strong ? strong.textContent : btn.textContent;
@@ -483,10 +664,7 @@ function useStarter(btn) {
 }
 
 function onKey(e) {
-  if (e.key === "Enter" && !e.shiftKey) {
-    e.preventDefault();
-    sendMessage();
-  }
+  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); }
 }
 
 function sendMessage() {
@@ -497,9 +675,7 @@ function sendMessage() {
   var welcome = document.getElementById("welcome");
   if (welcome) welcome.remove();
 
-  input.value = "";
-  autoGrow();
-
+  input.value = ""; autoGrow();
   appendMessage("user", text);
 
   var typingId = appendTyping();
@@ -511,26 +687,14 @@ function sendMessage() {
   fetch("/v1/chat/completions", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model: document.getElementById("model-selector").value,
-      messages: messages,
-      stream: true,
-      max_tokens: 256
-    })
+    body: JSON.stringify({ model: "deepseek-v4-flash", messages: messages, stream: true, max_tokens: 256 })
   })
   .then(function(r) {
     removeTyping(typingId);
-    if (!r.ok) {
-      appendMessage("assistant", "[HTTP " + r.status + "] Server error.");
-      finishStream();
-      return;
-    }
+    if (!r.ok) { appendMessage("assistant", "[HTTP " + r.status + "] Server error."); finishStream(); return; }
     return readStream(r.body);
   })
-  .catch(function(e) {
-    removeTyping(typingId);
-    appendMessage("assistant", "[Connection error] " + e.message);
-  })
+  .catch(function(e) { removeTyping(typingId); appendMessage("assistant", "[Connection error] " + e.message); })
   .finally(function() { finishStream(); });
 }
 
@@ -575,7 +739,7 @@ function readStream(body) {
   });
 }
 
-// ── Message DOM helpers ────────────────────────────────────────────────────
+// Message DOM helpers
 function appendMessage(role, text) {
   appState.messages.push({ role: role, content: text });
   var row = document.createElement("div");
@@ -586,8 +750,7 @@ function appendMessage(role, text) {
   var bubble = document.createElement("div");
   bubble.className = "bubble " + role;
   bubble.textContent = text;
-  row.appendChild(avatar);
-  row.appendChild(bubble);
+  row.appendChild(avatar); row.appendChild(bubble);
   document.getElementById("messages").appendChild(row);
   scrollToBottom();
 }
@@ -600,8 +763,7 @@ function createBubble(role) {
   avatar.textContent = "A";
   var bubble = document.createElement("div");
   bubble.className = "bubble " + role;
-  row.appendChild(avatar);
-  row.appendChild(bubble);
+  row.appendChild(avatar); row.appendChild(bubble);
   document.getElementById("messages").appendChild(row);
   scrollToBottom();
   return bubble;
@@ -619,35 +781,18 @@ function appendTyping() {
   var bubble = document.createElement("div");
   bubble.className = "bubble assistant";
   bubble.innerHTML = '<span class="typing-dot"></span><span class="typing-dot"></span><span class="typing-dot"></span>';
-  row.appendChild(avatar);
-  row.appendChild(bubble);
+  row.appendChild(avatar); row.appendChild(bubble);
   document.getElementById("messages").appendChild(row);
   scrollToBottom();
   return id;
 }
 
-function removeTyping(id) {
-  var el = document.getElementById(id);
-  if (el) el.remove();
-}
+function removeTyping(id) { var el = document.getElementById(id); if (el) el.remove(); }
 
-// ── Utilities ──────────────────────────────────────────────────────────────
-function scrollToBottom() {
-  var msgs = document.getElementById("messages");
-  msgs.scrollTop = msgs.scrollHeight;
-}
+function scrollToBottom() { var msgs = document.getElementById("messages"); msgs.scrollTop = msgs.scrollHeight; }
+function autoGrow() { var ta = document.getElementById("user-input"); ta.style.height = "auto"; ta.style.height = Math.min(ta.scrollHeight, 180) + "px"; }
+function esc(s) { return String(s).replace(/&/g, "&").replace(/</g, "<").replace(/>/g, ">"); }
 
-function autoGrow() {
-  var ta = document.getElementById("user-input");
-  ta.style.height = "auto";
-  ta.style.height = Math.min(ta.scrollHeight, 180) + "px";
-}
-
-function esc(s) {
-  return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-}
-
-// ── Init ───────────────────────────────────────────────────────────────────
 boot();
 </script>
 </body>

@@ -145,6 +145,8 @@ class _InferenceServicer(pb2_grpc.InferenceServiceServicer):
         context: grpc.ServicerContext,
     ) -> pb2.PingResponse:
         stats = self._engine.stats()
+        with self._lock:
+            _request_count = self._request_count
         return pb2.PingResponse(
             node_id=self._node_id,
             ready=True,
@@ -153,6 +155,8 @@ class _InferenceServicer(pb2_grpc.InferenceServiceServicer):
             layer_end=self._layer_end,
             expert_shards=self._expert_shards,
             backend=stats.get("backend", "unknown"),
+            gpu_util=stats.get("gpu_util", 0.0),
+            cpu_util=stats.get("cpu_util", 0.0),
         )
 
     # ------------------------------------------------------------------ #
