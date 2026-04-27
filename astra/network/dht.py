@@ -295,6 +295,31 @@ class AstraDHT:
             if expert_id in r.expert_shards
         ]
 
+    # ------------------------------------------------------------------ #
+    # Generic key-value API (used by EngramNode and other helpers)         #
+    # ------------------------------------------------------------------ #
+
+    def set(self, key: str, value: Any, ttl: float = _DEFAULT_TTL) -> None:
+        """Publish an arbitrary value under *key*; we are the owner."""
+        self._store.put(key, value, ttl=ttl, owner=self._node_id)
+
+    def get(self, key: str) -> Optional[Any]:
+        """Fetch an arbitrary value from the DHT, or None if absent/expired."""
+        return self._store.get(key)
+
+    def delete(self, key: str) -> bool:
+        """Remove a key we own. Returns True if deleted."""
+        return self._store.delete(key, owner=self._node_id)
+
+    def scan(self, prefix: str) -> List[tuple]:
+        """Yield (key, value) pairs for every non-expired key starting with *prefix*."""
+        out = []
+        for k in self._store.keys_by_prefix(prefix):
+            v = self._store.get(k)
+            if v is not None:
+                out.append((k, v))
+        return out
+
     def subscribe_peers(self, callback: Callable[[str, DHTNodeRecord], None]) -> None:
         """Call `callback(node_id, record)` whenever a peer announces."""
         def _wrap(key: str, value: dict) -> None:

@@ -7,9 +7,9 @@
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org)
-[![Tests](https://img.shields.io/badge/tests-322%20passed-brightgreen)]()
+[![Tests](https://img.shields.io/badge/tests-389%20passed-brightgreen)]()
 [![CI](https://github.com/qchauncey/astra/actions/workflows/ci.yml/badge.svg)](.github/workflows/ci.yml)
-[![Status](https://img.shields.io/badge/status-Phase%204--6%20complete%2C%20Phase%205%20in%20progress-blue)]()
+[![Status](https://img.shields.io/badge/status-Phase%201--4%2C%206%20complete%2C%20Phase%205%20in%20progress%2C%20Phase%207%20hardware--blocked-blue)]()
 
 **Astra** is an open-source P2P distributed inference framework that runs **DeepSeek-V4-Flash (284B)** across a cluster of commodity PCs (e.g., RTX 5070 Ti, 16 GB VRAM each) by combining:
 
@@ -17,7 +17,7 @@
 - **[KTransformers](https://github.com/kvcache-ai/ktransformers)**-style heterogeneous GPU/CPU compute split
 - **[hivemind](https://github.com/learning-at-home/hivemind)** DHT for peer discovery and key-value storage
 
-> **Alpha.** Phase 1, 2, 4 & 6 (local + dual-node gRPC pipeline + DP/TEE security hardening + frontend portal) are complete and tested. Phase 3 (full P2P network + API gateway) is in progress. Phase 5 (gRPC TLS + hivemind multi-machine DHT) enters implementation.
+> **Alpha.** Phase 1–4 and Phase 6 are complete and tested (local + dual-node gRPC pipeline, full P2P infrastructure with peer identity, weight manifest verification, Engram storage nodes, real RTT measurement, DP/TEE security hardening, frontend portal). Phase 5 (mTLS + hivemind multi-machine DHT) is in implementation. Phase 7 (inference performance tuning — continuous batching, speculative decoding, KTransformers C++ binding, expert replication) is hardware-blocked: it requires a GPU cluster and DeepSeek-V4 weights to design and validate.
 
 ---
 
@@ -330,6 +330,9 @@ astra/
 ├── inference/
 │   ├── heterogeneous.py        # HeterogeneousEngine (GPU attn + CPU MoE)
 │   ├── shared_expert_cache.py  # LRU expert cache with permanent pinning
+│   ├── tokenizer.py            # HuggingFace AutoTokenizer + stub fallback
+│   ├── weight_loader.py        # safetensors shard loader (verifies SHA-256)
+│   ├── weight_manifest.py      # SHA-256 manifest — prevents tampered weights
 │   └── differential_privacy.py # Differential privacy noise injection (ε/δ budget)
 ├── tee/
 │   ├── __init__.py             # TEEBackend abstract interface
@@ -345,8 +348,11 @@ astra/
 │   ├── tls.py                   # gRPC TLS secure channel (certificate management + mutual mTLS)
 │   └── kv_transfer.py          # KV-cache chunked streaming
 ├── network/
-│   ├── dht.py                  # AstraDHT — hivemind drop-in peer discovery
-│   └── orchestrator.py         # PipelineOrchestrator — N-node DHT chaining
+│   ├── dht.py                  # AstraDHT — hivemind drop-in peer discovery + generic KV API
+│   ├── engram.py               # EngramNode — storage-only DHT peers (KV-cache / weight shards)
+│   ├── identity.py             # PeerIdentity & TrustRegistry — Ed25519 signing + TOFU
+│   ├── orchestrator.py         # PipelineOrchestrator — N-node DHT chaining
+│   └── rtt.py                  # RTTMonitor — TCP/gRPC latency probes with EWMA smoothing
 └── api/
     ├── openai_compat.py        # OpenAI-compatible FastAPI endpoint + web UI serving
     └── static/
@@ -362,7 +368,7 @@ installer/
 ├── install.bat                 # Windows CMD installer (double-click)
 ├── install.ps1                 # Windows PowerShell installer
 └── start.bat                   # Windows one-click launcher (offline mode + browser)
-tests/                          # 322 pytest tests (all passing)
+tests/                          # 389 pytest tests (all passing)
 .github/workflows/ci.yml        # CI: Python 3.10/3.11/3.12 matrix + lint
 docs/
 ├── ARCHITECTURE.md             # Detailed design & wire format spec
@@ -384,8 +390,13 @@ docs/
 | `astra.routing.GeoAwareMoERouter` | Token-level `(token, expert_id) → best_node` via haversine RTT |
 | `astra.rpc.InferenceServer/Client` | gRPC pack → CRC32 verify → compute → deserialize loop |
 | `astra.rpc.KVCacheSender/Receiver` | Chunked KV tensor streaming between pipeline stages |
-| `astra.network.AstraDHT` | Peer discovery; drop-in for `hivemind.DHT` |
+| `astra.inference.AstraTokenizer` | HuggingFace AutoTokenizer wrapper with offline stub fallback |
+| `astra.inference.WeightManifest` | SHA-256 weight shard manifest — prevents tampered weight loading |
+| `astra.network.AstraDHT` | Peer discovery + generic KV API; drop-in for `hivemind.DHT` |
 | `astra.network.PipelineOrchestrator` | DHT → layer coverage → retry-safe N-hop chaining |
+| `astra.network.RTTMonitor` | Background TCP/gRPC latency prober; EWMA-smoothed RTT per peer |
+| `astra.network.PeerIdentity` / `TrustRegistry` | Ed25519 node signing + TOFU key registry |
+| `astra.network.EngramNode` | Storage-only DHT peer: in-memory or on-disk blob store |
 | `astra.api.openai_compat` | OpenAI `/v1/chat/completions` + SSE streaming + web UI serving |
 | `astra.api.static/index.html` | Web UI: Claude-like chat + sidebar peer panel with layer bars and latency |
 
@@ -396,8 +407,8 @@ docs/
 | Doc | Contents |
 |-----|----------|
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | System design, data flow, wire format spec |
-| [docs/ROADMAP.md](docs/ROADMAP.md) | Phase-by-phase plan (Phase 1 ✓ · Phase 2 ✓ · Phase 3 in progress) |
-| [docs/TESTING.md](docs/TESTING.md) | Test strategy: 322 tests covered + pending hardware test checklist |
+| [docs/ROADMAP.md](docs/ROADMAP.md) | Phase-by-phase plan (Phase 1–4, 6 ✓ complete · Phase 5 in progress · Phase 7 hardware-blocked) |
+| [docs/TESTING.md](docs/TESTING.md) | Test strategy: 389 tests covered + pending hardware test checklist |
 | [docs/SECURITY.md](docs/SECURITY.md) | mTLS encryption, differential privacy, output tamper-proofing |
 | [docs/TEE.md](docs/TEE.md) | TEE deployment guide: Intel SGX (Gramine) & AMD SEV-SNP attestation flow |
 | [docs/FEASIBILITY.md](docs/FEASIBILITY.md) | Compute thresholds, geo micro-cluster tiers, bandwidth analysis |
@@ -411,7 +422,7 @@ docs/
 |-------|-------|--------|
 | **Phase 1** | Local heterogeneous single-node inference (NumPy stub + SharedExpertCache) | ✅ Complete |
 | **Phase 2** | LAN dual-node gRPC pipeline (pack → transmit → compute → receive loop) | ✅ Complete |
-| **Phase 3** | AstraDHT peer discovery, N-node orchestration, OpenAI API, KV-cache streaming | 🔄 In Progress |
+| **Phase 3** | Full P2P network: AstraDHT, N-node orchestration, OpenAI API, weight manifest, RTT monitor, peer identity, Engram nodes | ✅ Complete |
 | **Phase 4** | Differential privacy (ε/δ budget, per-layer noise), TEE (Intel SGX + AMD SEV-SNP) | ✅ Complete |
 | **Phase 5** | gRPC TLS mutual auth + hivemind multi-machine DHT integration | 🔄 In Progress |
 | **Phase 6** | SPA dashboard (Chat, Monitor, Identity, Earnings), decentralized challenge-response login, real-time monitoring, contributor token accounting | ✅ Complete |

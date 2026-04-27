@@ -56,62 +56,71 @@ python mock_pipeline.py --phase 2 --seq-len 16 --hidden-dim 256
 
 ---
 
-## Phase 3 — Full P2P Network + Frontend Portal (IN PROGRESS)
+## Phase 3 — Full P2P Network (SOFTWARE-COMPLETE ✓)
 
-**Goal:** Real multi-machine cluster with hivemind DHT discovery and a user-facing interface.
+**Goal:** Real multi-machine cluster with hivemind DHT discovery, peer
+authentication, weight integrity, and storage/compute role separation.
+
+> **Scope split (April 2026):** The original Phase 3 plan bundled performance
+> optimizations (continuous batching, speculative decoding, expert
+> replication, adaptive load balancing) with the P2P infrastructure. Those
+> optimizations cannot be validated without real model weights and a GPU
+> cluster, so they have been moved to **[Phase 7 — Inference Performance
+> Tuning](#phase-7--inference-performance-tuning-blocked-on-hardware)** and
+> tagged as hardware-blocked. The P2P infrastructure portion is now complete.
 
 ### 3.1 P2P Node Discovery
 
 | Task | Status | Notes |
 |------|--------|-------|
-| Integrate `hivemind.DHT` for peer discovery | ✅ Done | `astra/network/dht.py` — AstraDHT with hivemind-compatible API |
-| DHT-based expert shard advertisement | ✅ Done | Nodes publish `{expert_ids, layer_range, region}` via `Store` |
-| Dynamic node join/leave handling in `GeoAwareMoERouter` | ✅ Done | Hook into DHT event callbacks |
-| Engram memory node (storage-only DHT peers) | Pending | Separate from compute nodes |
+| Integrate `hivemind.DHT` for peer discovery | ✓ Done | `astra/network/dht.py` |
+| DHT-based expert shard advertisement | ✓ Done | Nodes publish `{expert_ids, layer_range, region}` |
+| Dynamic node join/leave handling in `GeoAwareMoERouter` | ✓ Done | DHT event callbacks |
+| **Engram memory node (storage-only DHT peers)** | ✓ Done | `astra/network/engram.py` — InMemory + Disk stores, DHT discovery |
 
-### 3.2 Production Inference Engine
-
-| Task | Status | Notes |
-|------|--------|-------|
-| Real KTransformers C++ binding integration | Pending | Set `ASTRA_USE_KTRANSFORMERS=1` |
-| DeepSeek-V4 checkpoint loader (safetensors / GGUF) | Pending | Weight shard mapping to nodes |
-| KV-cache streaming between nodes (`TransferKVCache` RPC) | ✅ Done | `astra/rpc/kv_transfer.py` — chunked ≤3 MB streaming |
-| Speculative decoding support | Pending | Draft model on single fast node |
-| Continuous batching across pipeline stages | Pending | Micro-batch interleaving |
-
-### 3.3 Geographic Micro-Cluster Optimization
+### 3.2 Production Inference Engine (P2P infrastructure portion)
 
 | Task | Status | Notes |
 |------|--------|-------|
-| Real RTT measurement replacing haversine estimate | Pending | Active probe via Ping |
-| Cluster-affinity grouping (nodes within N ms latency) | Pending | Refine `GeoAwareMoERouter` |
-| Expert shard replication for hot experts | Pending | Frequency-based replication |
-| Adaptive load balancing across nodes | Pending | Weight dispatch by utilization |
+| KV-cache streaming between nodes (`TransferKVCache` RPC) | ✓ Done | `astra/rpc/kv_transfer.py` — chunked ≤3 MB streaming |
+| DeepSeek-V4 checkpoint loader (safetensors) | ✓ Done | `astra/inference/weight_loader.py` |
+| Tokenizer integration (HuggingFace + stub fallback) | ✓ Done | `astra/inference/tokenizer.py` |
+| Real KTransformers C++ binding integration | → Phase 7 | Hardware-blocked |
+| Speculative decoding | → Phase 7 | Hardware-blocked |
+| Continuous batching | → Phase 7 | Hardware-blocked |
 
-### 3.4 Security
+### 3.3 Geographic Micro-Cluster Optimization (foundation)
 
 | Task | Status | Notes |
 |------|--------|-------|
-| gRPC TLS + mutual certificate auth | → Phase 5 | `astra/rpc/tls.py` implemented in Phase 5 |
-| Peer identity via libp2p-style key pairs | Pending | DHT node authentication |
-| Weight shard integrity (SHA-256 manifest) | Pending | Prevent weight tampering |
+| **Real RTT measurement replacing haversine estimate** | ✓ Done | `astra/network/rtt.py` — TCP/gRPC probes, EWMA smoothing |
+| `GeoAwareMoERouter` consumes measured RTT | ✓ Done | Falls back to haversine when no measurement available |
+| Cluster-affinity grouping (nodes within N ms latency) | → Phase 7 | Needs production traffic patterns |
+| Expert shard replication for hot experts | → Phase 7 | Hardware-blocked |
+| Adaptive load balancing across nodes | → Phase 7 | Hardware-blocked |
+
+### 3.4 P2P Security
+
+| Task | Status | Notes |
+|------|--------|-------|
+| gRPC TLS + mutual certificate auth | → Phase 5 | `astra/rpc/tls.py` |
+| **Peer identity via Ed25519 key pairs** | ✓ Done | `astra/network/identity.py` — sign/verify advertisements + TOFU registry |
+| **Weight shard integrity (SHA-256 manifest)** | ✓ Done | `astra/inference/weight_manifest.py` — verified by `WeightLoader` on every shard load |
 
 ### 3.5 CLI & API Infrastructure
 
 | Task | Status | Notes |
 |------|--------|-------|
-| OpenAI-compatible API endpoint (SSE streaming) | ✅ Done | `astra/api/openai_compat.py` — `/v1/chat/completions` + SSE |
-| PipelineOrchestrator (N-node DHT chaining) | ✅ Done | `astra/network/orchestrator.py` |
-| run_node CLI (production node launcher) | ✅ Done | `scripts/run_node.py` |
-| run_cluster CLI (single-machine multi-node cluster) | ✅ Done | `scripts/run_cluster.py` |
+| OpenAI-compatible API endpoint (SSE streaming) | ✓ Done | `astra/api/openai_compat.py` |
+| PipelineOrchestrator (N-node DHT chaining) | ✓ Done | `astra/network/orchestrator.py` |
+| run_node CLI (production node launcher) | ✓ Done | `scripts/run_node.py` (--mode offline / p2p) |
+| run_cluster CLI (single-machine multi-node cluster) | ✓ Done | `scripts/run_cluster.py` |
 
-### 3.6 Frontend Portal (Future)
+### 3.6 Frontend Portal
 
 | Task | Status | Notes |
 |------|--------|-------|
-| Next.js / Electron UI scaffold | Pending | Decentralized login |
-| Real-time compute / VRAM / RTT monitoring dashboard | Pending | Pulls stats from Ping RPCs |
-| Contributor earnings / token accounting | Pending | For optional incentive layer |
+| All Phase 3.6 items | → Phase 6 | Completed in Phase 6 — see below |
 
 ---
 
@@ -195,6 +204,43 @@ python mock_pipeline.py --phase 2 --seq-len 16 --hidden-dim 256
 
 ---
 
+## Phase 7 — Inference Performance Tuning (BLOCKED ON HARDWARE)
+
+**Goal:** Performance optimizations that require real model weights, real
+GPU hardware, and real production workloads to design and validate.
+
+> **Why blocked:** Each item below makes a quantitative trade-off (latency
+> vs throughput, memory vs replication overhead, draft-model accuracy vs
+> speedup). Without real measurements these decisions devolve into
+> guesswork, and any code we write would be untested. The infrastructure
+> they plug into (HeterogeneousEngine, GeoAwareMoERouter, KVCacheSender)
+> is already in place; what's missing is the data to drive the design.
+
+### 7.1 Inference Engine
+
+| Task | Status | Prerequisite |
+|------|--------|--------------|
+| Real KTransformers C++ binding integration | Pending | KTransformers compiled for target CUDA arch + 580 GB DeepSeek-V4 weights |
+| Continuous batching across pipeline stages | Pending | Real model + observable production traffic |
+| Speculative decoding with draft model on fast node | Pending | Real model + draft model checkpoint |
+
+### 7.2 Routing & Load Distribution
+
+| Task | Status | Prerequisite |
+|------|--------|--------------|
+| Cluster-affinity grouping (nodes within N ms latency) | Pending | Multi-region production deployment to derive thresholds |
+| Expert shard replication for hot experts | Pending | Production expert-frequency telemetry |
+| Adaptive load balancing across nodes | Pending | Real GPU utilization measurements |
+
+### 7.3 Hardware CI
+
+| Task | Status | Prerequisite |
+|------|--------|--------------|
+| Self-hosted GPU runner (`hardware_test.yml`) | Pending | Access to a CUDA-capable runner — typically not free |
+| Real-weight numerical alignment tests vs reference impl | Pending | Self-hosted runner above |
+
+---
+
 ## Dependency Upgrade Path
 
 | Component | Current (mock) | Production target |
@@ -214,7 +260,7 @@ python mock_pipeline.py --phase 2 --seq-len 16 --hidden-dim 256
 
 | 层级 | 工具 | 当前状态 | 覆盖目标 |
 |-----|------|---------|---------|
-| 单元测试（CPU） | pytest | ✅ 299 个，全通过 | 序列化、LRU 缓存、Haversine、DHT、gRPC TLS、HeterogeneousEngine、KVTransfer、OpenAI API、Phase 6 dashboard |
+| 单元测试（CPU） | pytest | ✅ 389 个，全通过 | 序列化、LRU 缓存、Haversine + 真实 RTT、DHT、Engram、Peer Identity、Weight Manifest、gRPC TLS、HeterogeneousEngine、Tokenizer、KVTransfer、OpenAI API、Phase 6 dashboard |
 | 集成测试（本地） | pytest + threading | ✅ 已覆盖 | mock_pipeline.py Phase 1 & 2 |
 | 硬件集成测试 | 自托管 GPU Runner | ❌ 未配置 | KTransformers C++ 内核、真实权重数值对齐 |
 | 负载测试 | locust / 自定义 | ❌ 未实现 | 100 并发请求，吞吐量与 P99 延迟 |
@@ -243,9 +289,17 @@ python mock_pipeline.py --phase 2 --seq-len 16 --hidden-dim 256
 
 ## Known Limitations (Alpha)
 
-1. **No real model weights** — all tensors are zero/random. Output is numerically meaningless.
-2. **KTransformersStub is numpy** — ~100× slower than C++ CUDA kernels. Use for correctness testing only.
-3. **No checkpoint loading** — weight sharding and loading from safetensors/GGUF is not yet implemented.
-4. **DHT is in-memory** — `AstraDHT` uses in-memory store; not yet integrated with live `hivemind.DHT` multi-machine discovery. Nodes must be registered manually in local tests.
-5. **No authentication** — gRPC connections are insecure. Do not expose ports to the public internet.
-6. **No hardware CI** — GPU integration tests require a self-hosted runner. See [docs/TESTING.md](TESTING.md) for the pending hardware test plan.
+1. **No real model weights** — all tensors are random. The infrastructure
+   (loader, manifest verification, tokenizer, gRPC, DHT) is ready to accept
+   real weights, but Phase 7 work (real KTransformers + GPU validation)
+   remains.
+2. **KTransformersStub is numpy** — ~100× slower than C++ CUDA kernels.
+   Use for correctness testing only.
+3. **DHT is in-memory** — `AstraDHT` uses an in-memory store as the default
+   backend. The `hivemind.DHT` bridge exists (`astra/network/hivemind_bridge.py`)
+   but multi-machine bootstrap is still in progress (Phase 5).
+4. **TLS available but not enforced by default** — `astra/rpc/tls.py` ships
+   the certificate machinery; production deployments must opt in. See
+   `docs/TLS.md`.
+5. **No hardware CI** — GPU integration tests require a self-hosted runner.
+   See [docs/TESTING.md](TESTING.md) for the pending hardware test plan.

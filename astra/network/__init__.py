@@ -13,6 +13,23 @@
 # limitations under the License.
 
 from .dht import AstraDHT, DHTNodeRecord
+from .engram import (
+    DiskEngramStore,
+    EngramCapability,
+    EngramNode,
+    InMemoryEngramStore,
+    discover_engrams,
+    find_blob_holder,
+)
+from .identity import PeerIdentity, SignedPayload, TrustRegistry, verify_signed_payload
 from .orchestrator import PipelineOrchestrator, PipelineConfig
+from .rtt import PeerRTT, RTTMonitor, grpc_ping_probe, tcp_probe
 
-__all__ = ["AstraDHT", "DHTNodeRecord", "PipelineOrchestrator", "PipelineConfig"]
+__all__ = [
+    "AstraDHT", "DHTNodeRecord",
+    "PipelineOrchestrator", "PipelineConfig",
+    "PeerIdentity", "SignedPayload", "TrustRegistry", "verify_signed_payload",
+    "RTTMonitor", "PeerRTT", "tcp_probe", "grpc_ping_probe",
+    "EngramNode", "EngramCapability", "InMemoryEngramStore", "DiskEngramStore",
+    "discover_engrams", "find_blob_holder",
+]
