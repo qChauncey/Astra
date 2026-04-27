@@ -39,6 +39,7 @@ Architecture:
 
 from __future__ import annotations
 
+import logging
 import math
 import time
 from dataclasses import dataclass, field
@@ -51,6 +52,8 @@ from ..serialization.tensor_pack import (
     DEEPSEEK_V4_SHARED_EXPERTS,
     TensorPacket,
 )
+
+log = logging.getLogger(__name__)
 
 
 @dataclass
@@ -247,9 +250,10 @@ class GeoAwareMoERouter:
         """
         plan = DispatchPlan(layer_idx=layer_idx)
         seq_len = selected_experts.shape[0]
+        actual_k = selected_experts.shape[1] if selected_experts.ndim > 1 else 1
 
         for token_idx in range(seq_len):
-            for k_idx in range(self._top_k):
+            for k_idx in range(min(self._top_k, actual_k)):
                 expert_id = int(selected_experts[token_idx, k_idx])
                 if expert_id < self._num_shared:
                     # Shared expert: always local
@@ -292,4 +296,169 @@ class GeoAwareMoERouter:
                 }
                 for nid, n in self._nodes.items()
             },
+        }
+
+    # ------------------------------------------------------------------ #
+    # Phase 7.3.4 — Telemetry & Expert Replication                        #
+    # ------------------------------------------------------------------ #
+
+    def set_telemetry(self, telemetry: "ExpertTelemetry") -> None:
+        """Attach an ExpertTelemetry collector for access-frequency tracking."""
+        from .expert_telemetry import ExpertTelemetry
+        self._telemetry: Optional[ExpertTelemetry] = telemetry
+
+    def set_cluster_affinity(self, affinity: "ClusterAffinity") -> None:
+        """Attach a ClusterAffinity instance for replica placement."""
+        from .cluster_affinity import ClusterAffinity
+        self._affinity: Optional[ClusterAffinity] = affinity
+
+    def dispatch_with_telemetry(
+        self,
+        selected_experts: np.ndarray,
+        layer_idx: int,
+    ) -> DispatchPlan:
+        """
+        Build dispatch plan *and* record every (expert, node) assignment
+        in the telemetry collector for hot-expert detection.
+
+        Falls back to plain dispatch() if no telemetry is attached.
+        """
+        plan = self.dispatch(selected_experts, layer_idx)
+        if getattr(self, "_telemetry", None) is not None:
+            assignments: List[Tuple[int, str]] = []
+            for nid, pairs in plan.node_assignments.items():
+                for token_idx, eid in pairs:
+                    if eid >= self._num_shared:
+                        assignments.append((eid, nid))
+            self._telemetry.record_bulk(assignments)
+        return plan
+
+    def route_with_telemetry(
+        self,
+        packet: TensorPacket,
+        layer_idx: int,
+    ) -> Tuple[TensorPacket, DispatchPlan]:
+        """Gate + telemetry dispatch in one call."""
+        selected = self.gate(packet.tensor, layer_idx)
+        packet.selected_experts = selected
+        packet.layer_start = layer_idx
+        packet.layer_end = layer_idx + 1
+        plan = self.dispatch_with_telemetry(selected, layer_idx)
+        return packet, plan
+
+    def identify_hotspot_nodes(
+        self,
+        top_k: int = 8,
+    ) -> List[Tuple[str, int, float]]:
+        """
+        Identify nodes that host the most hot experts.
+
+        Returns list of (node_id, hotspot_count, avg_access_count) sorted
+        by hotspot_count descending.  Empty if no telemetry is attached.
+        """
+        if not hasattr(self, "_telemetry") or self._telemetry is None:
+            return []
+        from .expert_telemetry import HotSpot
+        hot: List[HotSpot] = self._telemetry.hot_experts(
+            top_k=top_k, exclude_experts=list(range(self._num_shared))
+        )
+        # Aggregate by node
+        node_count: Dict[str, int] = {}
+        node_total: Dict[str, int] = {}
+        for hs in hot:
+            node_count[hs.node_id] = node_count.get(hs.node_id, 0) + 1
+            node_total[hs.node_id] = node_total.get(hs.node_id, 0) + hs.access_count
+        result = [
+            (nid, node_count[nid], node_total[nid] / max(1, node_count[nid]))
+            for nid in node_count
+        ]
+        result.sort(key=lambda x: x[1], reverse=True)
+        return result
+
+    def recommend_replicas(
+        self,
+        max_replicas: int = 4,
+        exclude_shared: bool = True,
+    ) -> List[Tuple[int, str, str]]:
+        """
+        Recommend replica placement: (expert_id, source_node, target_node).
+
+        For each hot expert, finds the best nearby node (within the same
+        affinity group) that does NOT currently host the expert and has
+        available capacity.
+        """
+        if (
+            not hasattr(self, "_telemetry") or self._telemetry is None
+            or not hasattr(self, "_affinity") or self._affinity is None
+        ):
+            return []
+
+        from .expert_telemetry import HotSpot
+
+        exclude_ids = list(range(self._num_shared)) if exclude_shared else []
+        hot: List[HotSpot] = self._telemetry.hot_experts(
+            top_k=max_replicas * 2, exclude_experts=exclude_ids
+        )
+
+        recommendations: List[Tuple[int, str, str]] = []
+        affinity: "ClusterAffinity" = self._affinity
+
+        for hs in hot:
+            if len(recommendations) >= max_replicas:
+                break
+            current_hosts = set(self._expert_index.get(hs.expert_id, []))
+            group = affinity.group_for_node(hs.node_id)
+            if group is None:
+                continue
+            # Find nodes in the same group that don't host this expert
+            candidates = [
+                nid for nid in group.node_ids
+                if nid not in current_hosts
+                and self._nodes.get(nid) is not None
+                and self._nodes[nid].available
+            ]
+            if not candidates:
+                continue
+            target = affinity.find_nearest_group_node(hs.node_id, candidates)
+            if target:
+                recommendations.append((hs.expert_id, hs.node_id, target))
+
+        return recommendations
+
+    def apply_replica_placements(
+        self, placements: List[Tuple[int, str, str]]
+    ) -> int:
+        """
+        Apply replica placements: register the expert on the target node.
+
+        Returns number of replicas actually created.
+        """
+        count = 0
+        for expert_id, source_node, target_node in placements:
+            if target_node in self._nodes and target_node not in self._expert_index.get(expert_id, []):
+                self._nodes[target_node].expert_shards.append(expert_id)
+                self._expert_index.setdefault(expert_id, []).append(target_node)
+                count += 1
+                log.info(
+                    "Replica created: expert=%d from=%s to=%s",
+                    expert_id, source_node, target_node,
+                )
+        return count
+
+    def get_telemetry_report(self) -> Optional[dict]:
+        """Return a telemetry summary dict or None if not configured."""
+        if getattr(self, "_telemetry", None) is None:
+            return None
+        from .expert_telemetry import ExpertTelemetry
+        tel: ExpertTelemetry = self._telemetry
+        return {
+            **tel.to_api_dict(),
+            "hotspot_nodes": [
+                {"node_id": nid, "hotspot_count": cnt, "avg_access": round(avg, 1)}
+                for nid, cnt, avg in self.identify_hotspot_nodes(top_k=8)
+            ],
+            "replica_recommendations": [
+                {"expert_id": eid, "source_node": src, "target_node": tgt}
+                for eid, src, tgt in self.recommend_replicas(max_replicas=4)
+            ],
         }

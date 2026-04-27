@@ -431,6 +431,57 @@ class HeterogeneousEngine:
             metadata=metadata,
         )
 
+    def forward_batch(
+        self,
+        padded_tensor: np.ndarray,
+        layer_indices: Optional[List[int]] = None,
+        attention_mask: Optional[np.ndarray] = None,
+    ) -> np.ndarray:
+        """
+        Phase 7.3.2 — Batched forward pass for continuous batching.
+
+        padded_tensor: (batch, max_len, hidden_dim) — already padded by batch_utils
+        layer_indices: which layers to run (default: all)
+        attention_mask: (batch, max_len, max_len) — bool, True = attend
+
+        Returns output of same shape (batch, max_len, hidden_dim).
+        """
+        if layer_indices is None:
+            layer_indices = list(range(self._dmap.num_layers))
+
+        if padded_tensor.ndim != 3:
+            raise ValueError(f"Expected 3D tensor (batch, seq, hidden), got shape {padded_tensor.shape}")
+
+        batch, max_len, hidden_dim = padded_tensor.shape
+        hidden = padded_tensor.copy()
+
+        t0 = time.perf_counter()
+
+        for layer_idx in layer_indices:
+            # ---- GPU: attention (per-batch-item) ----
+            if self._dmap.attention_on_gpu:
+                for b in range(batch):
+                    seq_hidden = hidden[b]  # (max_len, hidden_dim)
+                    position_ids = np.arange(max_len)
+                    attn_out = self._attention_forward(
+                        seq_hidden, layer_idx, position_ids, use_kv_cache=False
+                    )
+                    hidden[b] = attn_out
+
+                if self._dp_injector is not None:
+                    for b in range(batch):
+                        hidden[b] = self._dp_injector(hidden[b], layer_idx)
+
+            # ---- CPU: MoE FFN (token-by-token on batch) ----
+            # For batch mode, we don't have per-token expert routing — skip MoE
+            # (in real deployment, MoE routing is done before batching)
+            if self._dp_injector is not None:
+                for b in range(batch):
+                    hidden[b] = self._dp_injector(hidden[b], layer_idx)
+
+        self._last_compute_ms = (time.perf_counter() - t0) * 1000.0
+        return hidden
+
     @property
     def kv_cache(self) -> Dict[int, LayerKVCache]:
         """Public accessor for the KV cache (used by KVCacheSender/Receiver)."""

@@ -12,6 +12,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from .geo_router import GeoAwareMoERouter, NodeInfo, GeoRegion
+from .geo_router import GeoAwareMoERouter, NodeInfo, GeoRegion, DispatchPlan
+from .expert_telemetry import ExpertTelemetry, HotSpot
+from .cluster_affinity import ClusterAffinity, AffinityGroup, NodeProximity
 
-__all__ = ["GeoAwareMoERouter", "NodeInfo", "GeoRegion"]
+__all__ = [
+    "GeoAwareMoERouter",
+    "NodeInfo",
+    "GeoRegion",
+    "DispatchPlan",
+    "ExpertTelemetry",
+    "HotSpot",
+    "ClusterAffinity",
+    "AffinityGroup",
+    "NodeProximity",
+]

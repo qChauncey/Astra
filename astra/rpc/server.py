@@ -46,6 +46,10 @@ from typing import Iterator, List, Optional
 
 import grpc
 
+import numpy as np
+
+from ..inference.batch_scheduler import BatchGroup, BatchRequest, ContinuousBatchScheduler
+from ..inference.batch_utils import BatchInfo, pad_sequences, unpad_output
 from ..inference.heterogeneous import DeviceMap, HeterogeneousEngine
 from ..inference.shared_expert_cache import ExpertWeights
 from ..serialization.tensor_pack import TensorSerializer
@@ -266,3 +270,85 @@ class InferenceServer:
 
     def engine_stats(self) -> dict:
         return self._engine.stats()
+
+    # ------------------------------------------------------------------ #
+    # Phase 7.3.2 — Continuous Batching Support                            #
+    # ------------------------------------------------------------------ #
+
+    def run_batch(
+        self,
+        batch_group: BatchGroup,
+        layer_indices: Optional[List[int]] = None,
+    ) -> BatchGroup:
+        """
+        Execute a pre-formed batch group through the heterogeneous engine.
+
+        Takes a BatchGroup with padded_tensor and batch_info, runs the engine's
+        forward pass, unpads the output, and returns the batch_group updated
+        with per-request results.
+
+        Parameters
+        ----------
+        batch_group: BatchGroup from ContinuousBatchScheduler.form_batches()
+        layer_indices: optional override for layer range (defaults to
+                       self._servicer._layer_start.._layer_end)
+
+        Returns
+        -------
+        The same BatchGroup with each BatchRequest.result populated.
+        """
+        if batch_group.padded_tensor is None or batch_group.batch_info is None:
+            raise ValueError("BatchGroup must have padded_tensor and batch_info set")
+
+        if layer_indices is None:
+            layer_indices = list(range(
+                self._servicer._layer_start,
+                self._servicer._layer_end,
+            ))
+
+        t0 = time.perf_counter()
+        engine_output: np.ndarray = self._engine.forward_batch(
+            batch_group.padded_tensor,
+            layer_indices=layer_indices,
+            attention_mask=batch_group.batch_info.attention_mask,
+        )
+        elapsed_ms = (time.perf_counter() - t0) * 1000.0
+
+        unpadded = unpad_output(engine_output, batch_group.batch_info)
+        for i, req in enumerate(batch_group.requests):
+            if i < len(unpadded):
+                req.result = unpadded[i]
+                req.metadata["compute_ms"] = elapsed_ms
+            else:
+                req.error = f"No output slice for request index {i}"
+        return batch_group
+
+    def run_batches_from_scheduler(
+        self,
+        scheduler: ContinuousBatchScheduler,
+        layer_indices: Optional[List[int]] = None,
+    ) -> int:
+        """
+        Drain all ready batches from a scheduler and execute them.
+
+        Returns number of batches executed.
+        """
+        batches = scheduler.form_batches()
+        for bg in batches:
+            try:
+                self.run_batch(bg, layer_indices=layer_indices)
+                # run_batch has already set per-request results; we just
+                # complete with a dummy output so scheduler tracks completion.
+                scheduler.complete_batch(
+                    bg.batch_id,
+                    bg.padded_tensor if bg.padded_tensor is not None else
+                    np.zeros((1, 1, 1), dtype=np.float32),
+                )
+            except Exception as exc:
+                log.exception("Batch %s failed: %s", bg.batch_id, exc)
+                scheduler.complete_batch(
+                    bg.batch_id,
+                    np.zeros((1, 1, 1), dtype=np.float32),
+                    error=str(exc),
+                )
+        return len(batches)
