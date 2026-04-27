@@ -505,20 +505,16 @@ class HeterogeneousEngine:
         """
         q_w, k_w, v_w, o_w, norm_w = self._get_attn_weights(layer_idx)
 
-        t0 = time.perf_counter()
         normed = self._kt.rms_layer_norm(hidden, norm_w)
-        t_norm = time.perf_counter() - t0
 
         if position_ids is None:
             position_ids = np.arange(normed.shape[0])
 
         # Project → RoPE → attention
         # Use GPU-accelerated matmul when available
-        t0 = time.perf_counter()
         q = self._kt.matrix_multiply(normed, q_w.T)
         k = self._kt.matrix_multiply(normed, k_w.T)
         v = self._kt.matrix_multiply(normed, v_w.T)
-        t_proj = time.perf_counter() - t0
 
         q = self._kt.rope_embedding(q.astype(np.float16), position_ids)
         k = self._kt.rope_embedding(k.astype(np.float16), position_ids)
@@ -531,14 +527,12 @@ class HeterogeneousEngine:
         else:
             k_full, v_full = k, v
 
-        t0 = time.perf_counter()
         attn_out = self._kt.multi_latent_attention(
             q[np.newaxis],
             k_full[np.newaxis],
             v_full[np.newaxis],
             head_dim=self._dmap.head_dim,
         )[0]
-        t_attn = time.perf_counter() - t0
 
         out = self._kt.matrix_multiply(attn_out.astype(np.float32), o_w.T.astype(np.float32))
 
