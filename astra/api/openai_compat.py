@@ -323,11 +323,14 @@ def create_app(
         peers = raw.app.state.dht.get_all_peers()
         nodes: List[dict] = []
         for p in peers:
-            # Attempt gRPC Ping via InferenceClient
+            # Attempt gRPC Ping via InferenceClient — bounded to 5 s so one
+            # unreachable peer cannot stall the entire monitor response.
             try:
                 from ..rpc.client import InferenceClient
                 client = InferenceClient(target=p.address)
-                result = await asyncio.to_thread(client.ping)
+                result = await asyncio.wait_for(
+                    asyncio.to_thread(client.ping), timeout=5.0
+                )
                 nodes.append({
                     "node_id": result.node_id,
                     "address": p.address,
@@ -363,8 +366,11 @@ def create_app(
     # Phase 6: Login — decentralized identity                                #
     # ------------------------------------------------------------------ #
 
-    # In-process identity store (production: replace with persistent DB)
+    # In-process identity store (production: replace with persistent DB).
+    # Capped at 1 000 entries to prevent memory exhaustion from unredeemed
+    # challenges; oldest entry evicted when the limit is reached.
     _identity_nonce: Dict[str, str] = {}
+    _NONCE_MAX = 1_000
 
     @app.post("/api/login")
     async def login(raw: Request):
@@ -426,6 +432,9 @@ def create_app(
                 status_code=400,
             )
 
+        if len(_identity_nonce) >= _NONCE_MAX:
+            # Evict the oldest entry to keep the dict bounded.
+            _identity_nonce.pop(next(iter(_identity_nonce)))
         nonce = secrets.token_hex(32)
         _identity_nonce[contributor_id] = nonce
         return {"contributor_id": contributor_id, "nonce": nonce}

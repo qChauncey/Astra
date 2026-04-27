@@ -198,7 +198,7 @@ class RTTMonitor:
                 with self._lock:
                     peer.record_success(rtt_ms, self._alpha)
             except Exception as exc:
-                log.debug("Probe failed for %s: %s", peer.address, exc)
+                log.warning("Probe failed for %s: %s", peer.address, exc)
                 with self._lock:
                     peer.record_failure(self._fail_threshold)
 

@@ -40,11 +40,14 @@ Manager dict or a real hivemind DHT instance.
 
 from __future__ import annotations
 
+import logging
 import threading
 import time
 import uuid
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional
+
+log = logging.getLogger(__name__)
 
 
 # ─────────────────────────────────────────────────────────────────────────── #
@@ -270,8 +273,8 @@ class AstraDHT:
             if v:
                 try:
                     records.append(DHTNodeRecord.from_dict(v))
-                except Exception:
-                    pass
+                except Exception as exc:
+                    log.warning("Skipping corrupt DHT record %s: %s", k, exc)
         return records
 
     def get_peer(self, node_id: str) -> Optional[DHTNodeRecord]:
@@ -279,7 +282,8 @@ class AstraDHT:
         if v:
             try:
                 return DHTNodeRecord.from_dict(v)
-            except Exception:
+            except Exception as exc:
+                log.warning("Corrupt DHT record for %s: %s", node_id, exc)
                 return None
         return None
 

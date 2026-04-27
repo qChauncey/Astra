@@ -70,7 +70,7 @@ try:
     _HAS_HIVEMIND = True
 except ImportError as exc:
     _HAS_HIVEMIND = False
-    _HIVE_IMPORT_ERROR = str(exc)
+    _HIVEMIND_IMPORT_ERROR = str(exc)
 
 
 # ─────────────────────────────────────────────────────────────────────────── #
@@ -263,11 +263,6 @@ def create_dht(
     AstraDHT or HivemindDHT
         Both implement the same interface.
     """
-    if not _HAS_HIVEMIND:
-        _HIVE_IMPORT_ERROR = _HIVEMIND_IMPORT_ERROR or "hivemind not installed"
-    else:
-        _HIVE_IMPORT_ERROR = None
-
     dht_node_id = node_id
 
     if use_hivemind and _HAS_HIVEMIND:
@@ -288,10 +283,11 @@ def create_dht(
             )
 
     if use_hivemind and not _HAS_HIVEMIND:
+        _import_err = _HIVEMIND_IMPORT_ERROR or "hivemind not installed"
         log.info(
             "hivemind not installed (%s). Using in-memory AstraDHT. "
             "Install with: pip install hivemind>=1.1.0",
-            _HIVE_IMPORT_ERROR,
+            _import_err,
         )
 
     log.info("DHT backend: AstraDHT (in-memory)")
