@@ -44,7 +44,7 @@ from __future__ import annotations
 import logging
 import time
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Tuple
+from typing import List, Optional, Tuple
 
 import numpy as np
 
@@ -139,7 +139,6 @@ class DraftModelRunner:
             Log-probabilities for each draft token.
         """
         self._call_count += 1
-        seq_len = hidden_states.shape[0]
 
         # Stub: generate logits from the last hidden state + noise
         last_hidden = hidden_states[-1, :].astype(np.float32)
@@ -256,7 +255,6 @@ class TargetModelVerifier:
             elif self.acceptance_mode == "relaxed":
                 # Leviathan et al. rejection sampling
                 target_argmax = int(np.argmax(target_logit))
-                draft_argmax = int(np.argmax(draft_logit))
 
                 if draft_id == target_argmax:
                     # Greedy match: always accept

@@ -82,15 +82,15 @@ def pad_sequences(
     padded = np.zeros((batch_size, batch_len, hidden_dim), dtype=sequences[0].dtype)
 
     for i, seq in enumerate(sequences):
-        l = seq.shape[0]
-        padded[i, :l, :] = seq
+        length = seq.shape[0]
+        padded[i, :length, :] = seq
 
     pad_mask = None
     attn_mask = None
     if generate_attention_mask:
         pad_mask = np.ones((batch_size, batch_len), dtype=bool)
-        for i, l in enumerate(lengths):
-            pad_mask[i, :l] = False  # False = valid token
+        for i, length in enumerate(lengths):
+            pad_mask[i, :length] = False  # False = valid token
         # Causal + pad: True = attend (not masked)
         causal = np.tri(batch_len, batch_len, k=0, dtype=bool)  # (max_len, max_len)
         attn_mask = causal[np.newaxis, :, :] & ~pad_mask[:, np.newaxis, :]  # (batch, max, max)

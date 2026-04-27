@@ -43,9 +43,13 @@ import logging
 import math
 import time
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Dict, List, Optional, Tuple
 
 import numpy as np
+
+if TYPE_CHECKING:
+    from .expert_telemetry import ExpertTelemetry
+    from .cluster_affinity import ClusterAffinity
 
 from ..serialization.tensor_pack import (
     DEEPSEEK_V4_TOP_K_EXPERTS,
@@ -304,12 +308,10 @@ class GeoAwareMoERouter:
 
     def set_telemetry(self, telemetry: "ExpertTelemetry") -> None:
         """Attach an ExpertTelemetry collector for access-frequency tracking."""
-        from .expert_telemetry import ExpertTelemetry
         self._telemetry: Optional[ExpertTelemetry] = telemetry
 
     def set_cluster_affinity(self, affinity: "ClusterAffinity") -> None:
         """Attach a ClusterAffinity instance for replica placement."""
-        from .cluster_affinity import ClusterAffinity
         self._affinity: Optional[ClusterAffinity] = affinity
 
     def dispatch_with_telemetry(
@@ -449,7 +451,6 @@ class GeoAwareMoERouter:
         """Return a telemetry summary dict or None if not configured."""
         if getattr(self, "_telemetry", None) is None:
             return None
-        from .expert_telemetry import ExpertTelemetry
         tel: ExpertTelemetry = self._telemetry
         return {
             **tel.to_api_dict(),
