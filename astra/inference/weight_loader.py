@@ -171,12 +171,35 @@ class WeightLoader:
         model_dir: str | pathlib.Path,
         layer_start: int = 0,
         layer_end: int = 61,
+        verify_integrity: bool = True,
     ) -> None:
         self._dir = pathlib.Path(model_dir)
         self.layer_start = layer_start
         self.layer_end = layer_end
         self._index = ModelIndex(self._dir)
         self._shard_cache: Dict[str, Dict[str, np.ndarray]] = {}
+        self._verify_integrity = verify_integrity
+        self._manifest = self._load_manifest() if verify_integrity else None
+        self._verified_shards: set[str] = set()
+
+    def _load_manifest(self):
+        """Load weight manifest if present. Returns None if not found."""
+        from .weight_manifest import WeightManifest, find_manifest
+        path = find_manifest(self._dir)
+        if path is None:
+            log.warning(
+                "No astra_manifest.json in %s — weight integrity NOT verified. "
+                "Trusted manifests prevent malicious P2P peers from serving tampered shards.",
+                self._dir,
+            )
+            return None
+        try:
+            m = WeightManifest.load(path)
+            log.info("Loaded manifest: %d shards, algorithm=%s", len(m), m.algorithm)
+            return m
+        except Exception as exc:
+            log.error("Failed to load manifest %s: %s", path, exc)
+            return None
 
     # ── Internal helpers ──────────────────────────────────────────────────
 
@@ -185,9 +208,29 @@ class WeightLoader:
             path = self._dir / shard_name
             if not path.is_file():
                 raise FileNotFoundError(f"Shard not found: {path}")
+            self._verify_shard(shard_name, path)
             log.info("Loading shard %s …", shard_name)
             self._shard_cache[shard_name] = _load_safetensors(path)
         return self._shard_cache[shard_name]
+
+    def _verify_shard(self, shard_name: str, path: pathlib.Path) -> None:
+        """Verify shard SHA-256 against manifest. Raises if it fails."""
+        if self._manifest is None:
+            return
+        if shard_name in self._verified_shards:
+            return
+        if shard_name not in self._manifest:
+            raise RuntimeError(
+                f"Shard {shard_name!r} is not in the manifest. "
+                "Possible tampering or unauthorised file."
+            )
+        if not self._manifest.verify_file(path):
+            raise RuntimeError(
+                f"Shard {shard_name!r} hash mismatch — refusing to load. "
+                "The file does not match the trusted manifest."
+            )
+        self._verified_shards.add(shard_name)
+        log.debug("Verified shard %s ✓", shard_name)
 
     def _get_tensor(self, name: str) -> Optional[np.ndarray]:
         shard = self._index.shard_for_tensor(name)

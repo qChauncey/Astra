@@ -94,6 +94,7 @@ class NodeInfo:
     expert_shards: List[int]  # expert IDs this node can compute
     available: bool = True
     last_seen: float = field(default_factory=time.time)
+    address: Optional[str] = None  # "host:port" — used for active RTT probes
 
     @property
     def num_experts(self) -> int:
@@ -140,6 +141,7 @@ class GeoAwareMoERouter:
         num_experts: int = 256,
         top_k: int = DEEPSEEK_V4_TOP_K_EXPERTS,
         num_shared: int = DEEPSEEK_V4_SHARED_EXPERTS,
+        rtt_monitor: Optional[object] = None,
     ) -> None:
         self._local_region = REGIONS.get(local_region, GeoRegion(local_region, 0, 0))
         self._num_experts = num_experts
@@ -150,6 +152,20 @@ class GeoAwareMoERouter:
         self._expert_index: Dict[int, List[str]] = {}
         # cached gate weight matrices keyed by layer_idx
         self._router_weights: Dict[int, np.ndarray] = {}
+        # Optional RTTMonitor — when set, real measurements override haversine.
+        self._rtt_monitor = rtt_monitor
+
+    def _effective_rtt_ms(self, node: NodeInfo) -> float:
+        """
+        Return the best RTT estimate to *node*: real measurement if available
+        and the peer is healthy; otherwise haversine fallback.
+        """
+        if self._rtt_monitor is not None and getattr(node, "address", None):
+            measured = self._rtt_monitor.get_rtt(node.address)
+            healthy = self._rtt_monitor.is_healthy(node.address)
+            if measured is not None and healthy:
+                return measured
+        return self._local_region.rtt_ms(node.region)
 
     # ------------------------------------------------------------------ #
     # Registry                                                              #
@@ -215,7 +231,7 @@ class GeoAwareMoERouter:
             return None
         return min(
             candidates,
-            key=lambda nid: self._local_region.rtt_ms(self._nodes[nid].region),
+            key=lambda nid: self._effective_rtt_ms(self._nodes[nid]),
         )
 
     def dispatch(
