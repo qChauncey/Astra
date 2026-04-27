@@ -54,7 +54,6 @@ Unified API (compatible with both backends):
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
 from typing import Any, Callable, List, Optional
 
 from .dht import AstraDHT, DHTNodeRecord, _DEFAULT_TTL
@@ -307,3 +306,5 @@ def create_dht(
 def is_hivemind_available() -> bool:
     """Return True if hivemind can be imported (optional dependency)."""
     return _HAS_HIVEMIND
+
+

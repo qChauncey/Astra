@@ -9,10 +9,7 @@ mTLS credential loading, and TOFU trust store.
 import os
 import tempfile
 
-import pytest
-
 from astra.rpc.tls import (
-    CertBundle,
     TLSConfig,
     TofuTrustStore,
     generate_self_signed_cert_bundle,
@@ -161,6 +158,7 @@ class TestCredentialLoading:
                 f.write(ca_bundle.cert_pem)
             creds = load_server_credentials(cert_path, key_path, ca_cert_path)
             assert creds is not None
+
 
     def test_load_client_credentials_from_paths(self):
         bundle = generate_self_signed_cert_bundle("cli")

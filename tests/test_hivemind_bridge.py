@@ -3,8 +3,6 @@
 
 """Tests for astra.network.hivemind_bridge — DHT factory and backend detection."""
 
-from unittest import mock
-
 import pytest
 
 from astra.network.dht import AstraDHT, DHTNodeRecord, _GlobalStore
@@ -79,7 +77,6 @@ class TestHivemindDHTClass:
     @pytest.mark.skipif(not _HAS_HIVEMIND, reason="hivemind not installed")
     def test_hivemind_dht_can_be_instantiated(self):
         """Smoke test: HivemindDHT instantiates without error (starts real DHT)."""
-        import hivemind
         # Use a unique port to avoid conflicts
         dht = HivemindDHT(node_id="smoke-test", port=15555)
         try:
@@ -201,3 +198,5 @@ class TestCreateDhtWithStore:
         dht_a.announce(record, ttl=300)
         peers = dht_b.get_all_peers()
         assert any(p.node_id == "shared-a" for p in peers)
+
+
