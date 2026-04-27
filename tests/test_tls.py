@@ -159,7 +159,6 @@ class TestCredentialLoading:
             creds = load_server_credentials(cert_path, key_path, ca_cert_path)
             assert creds is not None
 
-
     def test_load_client_credentials_from_paths(self):
         bundle = generate_self_signed_cert_bundle("cli")
         ca_bundle = generate_self_signed_cert_bundle("ca")
