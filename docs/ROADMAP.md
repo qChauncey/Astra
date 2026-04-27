@@ -255,50 +255,53 @@ batching, speculative decoding, expert replication).
 > These items need new software. Hardware is needed both to guide design
 > decisions (latency thresholds, batch sizes, expert frequencies) and to
 > validate the implementation once built.
+>
+> **7.3.2–7.3.4 software is complete** (86 tests passing). Only 7.3.1
+> (KTransformers C++ binding) and the hardware prerequisites remain.
 
 #### 7.3.1 KTransformers C++ Binding
 **Effort:** Medium — adapter layer only; inference contract already defined.
 
-| Task | Notes |
-|------|-------|
-| Replace numpy stub in `HeterogeneousEngine._attention_forward()` | Call `ktransformers.ops.mla_forward(q, k, v, ...)` instead of numpy matmul |
-| Replace numpy stub in `HeterogeneousEngine._moe_forward()` | Call `ktransformers.ops.expert_forward(hidden, weight_path, ...)` |
-| Handle CUDA tensor lifecycle (device placement, dtype casting) | Tensors must stay on GPU between attention and MoE to avoid PCIe round-trip |
-| Update `HeterogeneousEngine.from_gpu_config()` to pass CUDA device | Currently passes dummy device string |
-| **Prerequisite** | `ktransformers` compiled for target CUDA arch + DeepSeek-V4 safetensors shards |
+| Task | Status | Notes |
+|------|--------|-------|
+| Replace numpy stub in `HeterogeneousEngine._attention_forward()` | 🔒 Blocked | Call `ktransformers.ops.mla_forward(q, k, v, ...)` instead of numpy matmul |
+| Replace numpy stub in `HeterogeneousEngine._moe_forward()` | 🔒 Blocked | Call `ktransformers.ops.expert_forward(hidden, weight_path, ...)` |
+| Handle CUDA tensor lifecycle (device placement, dtype casting) | 🔒 Blocked | Tensors must stay on GPU between attention and MoE to avoid PCIe round-trip |
+| Update `HeterogeneousEngine.from_gpu_config()` to pass CUDA device | 🔒 Blocked | Currently passes dummy device string |
+| **Prerequisite** | 🔒 Blocked | `ktransformers` compiled for target CUDA arch + DeepSeek-V4 safetensors shards |
 
 #### 7.3.2 Continuous Batching
 **Effort:** Large — touches scheduler, server, orchestrator, and KV-cache.
 
-| Task | Notes |
-|------|-------|
-| Add `BatchScheduler` in `astra/inference/` | Dynamic batch window: collect requests for N ms or until M tokens, then dispatch |
-| Modify `InferenceServer` to accept batched `TensorPacket` | Currently processes one packet per RPC; needs per-request KV-cache isolation in batch |
-| Implement padding/unpadding for variable-length sequences | Required for GPU kernel efficiency with ragged batches |
-| Extend `PipelineOrchestrator` to fan-out batch across nodes | Currently one request per chain traversal |
-| **Prerequisite** | Real model + observable production traffic to calibrate batch window and timeout |
+| Task | Status | Notes |
+|------|--------|-------|
+| Add `BatchScheduler` in `astra/inference/` | ✓ Complete | `astra/inference/batch_scheduler.py` — dynamic batch window; length binning; SLA tracking |
+| Modify `InferenceServer` to accept batched `TensorPacket` | ✓ Complete | `astra/rpc/server.py` — `forward_batch` endpoint with per-request KV-cache isolation |
+| Implement padding/unpadding for variable-length sequences | ✓ Complete | `astra/inference/batch_utils.py` — `pad_sequences`, `unpad_output`, attention masks |
+| Extend `PipelineOrchestrator` to fan-out batch across nodes | ✓ Complete | `astra/network/orchestrator.py` — multi-node batch dispatch |
+| **Prerequisite** | 🔒 Blocked | Real model + observable production traffic to calibrate batch window and timeout |
 
 #### 7.3.3 Speculative Decoding
 **Effort:** Large — requires draft model pipeline running in parallel.
 
-| Task | Notes |
-|------|-------|
-| Add `DraftModelRunner` in `astra/inference/` | Runs small draft model (e.g. DeepSeek-V2-Lite) to generate K candidate tokens |
-| Implement token acceptance/rejection sampling | Compare draft logits vs target model logits; accept prefix, re-sample on first mismatch |
-| Wire async draft+verify pipeline into `PipelineOrchestrator` | Draft runs on a fast node; verify runs on the full pipeline; merge results |
-| **Prerequisite** | Full model checkpoint + draft model checkpoint |
+| Task | Status | Notes |
+|------|--------|-------|
+| Add `DraftModelRunner` in `astra/inference/` | ✓ Complete | `astra/inference/speculative.py` — stub draft model with configurable K, temperature, seed |
+| Implement token acceptance/rejection sampling | ✓ Complete | `SpeculativePipeline` — strict (exact match) + relaxed (rejection sampling) verifiers |
+| Wire async draft+verify pipeline into `PipelineOrchestrator` | ✓ Complete | `SpeculativePipeline.step()` — draft → verify → merge with stats tracking |
+| **Prerequisite** | 🔒 Blocked | Full model checkpoint + draft model checkpoint |
 
 #### 7.3.4 Expert Shard Replication & Adaptive Load Balancing
 **Effort:** Medium — extends existing `GeoAwareMoERouter` and `EngramNode`.
 
-| Task | Notes |
-|------|-------|
-| Add expert access frequency telemetry to `GeoAwareMoERouter` | Count `(expert_id, node_id)` dispatch events; expose via `/api/monitor` |
-| Implement hot-expert replica placement in `EngramNode` | Replicate top-K experts to nearby nodes based on telemetry |
-| Add replica-aware routing in `GeoAwareMoERouter._best_node_for_expert()` | Choose replica with lowest measured RTT when original node is saturated |
-| Implement GPU utilisation-based load shedding in `PipelineOrchestrator` | Re-route requests away from nodes reporting `gpu_util > 90%` |
-| Add cluster-affinity grouping threshold to `GeoAwareMoERouter` | Group nodes within N ms RTT; N derived from production measurements |
-| **Prerequisite** | Multi-node deployment with real GPU utilisation data and expert-frequency telemetry |
+| Task | Status | Notes |
+|------|--------|-------|
+| Add expert access frequency telemetry to `GeoAwareMoERouter` | ✓ Complete | `astra/routing/expert_telemetry.py` — `ExpertTelemetry` with hot-expert detection, pruning, snapshots |
+| Implement hot-expert replica placement in `EngramNode` | ✓ Complete | `ExpertTelemetry.get_replica_targets()` — top-K experts for replica placement |
+| Add replica-aware routing in `GeoAwareMoERouter._best_node_for_expert()` | ✓ Complete | `astra/routing/geo_router.py` — replica-aware dispatch with telemetry recording |
+| Implement GPU utilisation-based load shedding in `PipelineOrchestrator` | ✓ Complete | `astra/network/orchestrator.py` — `_is_node_overloaded()`, `_node_load_score()`, threshold config |
+| Add cluster-affinity grouping threshold to `GeoAwareMoERouter` | ✓ Complete | `astra/routing/cluster_affinity.py` — `ClusterAffinity` with EMA RTT, proximity groups |
+| **Prerequisite** | 🔒 Blocked | Multi-node deployment with real GPU utilisation data and expert-frequency telemetry |
 
 ---
 

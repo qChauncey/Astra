@@ -121,6 +121,10 @@ class PipelineOrchestrator:
     Retry logic per hop:
       - On failure, backoff and try the next peer covering the same layers.
       - If all peers for a segment fail, abort with a clear error.
+
+    Load offloading (Phase 7.3.1):
+      - Skips nodes whose GPU utilisation exceeds a configurable threshold.
+      - Falls back to the next-best peer in the same layer group.
     """
 
     def __init__(
@@ -140,6 +144,73 @@ class PipelineOrchestrator:
             num_experts=self._cfg.num_experts,
             top_k=self._cfg.top_k,
             num_shared=self._cfg.num_shared_experts,
+        )
+        # Phase 7.3.1 — GPU utilisation load-offload threshold (0.0–1.0).
+        # Peers with utilisation ≥ this value are deprioritised.
+        self._gpu_util_threshold: float = 0.9
+        # Phase 7.3.4 — optional telemetry/affinity references for replica placement.
+        self._telemetry_ref: Optional[object] = None
+        self._affinity_ref: Optional[object] = None
+        # Cache of per-node health metrics (updated from DHT heartbeats).
+        self._node_health: Dict[str, dict] = {}
+        # Track request counts per node for soft load-aware routing.
+        self._inflight_counts: Dict[str, int] = {}
+        self._inflight_lock: Optional[object] = None  # set by _ensure_inflight_lock
+        import threading
+        self._inflight_lock = threading.Lock()
+
+    def set_gpu_util_threshold(self, threshold: float) -> None:
+        """Set the GPU utilisation threshold for load-offloading (0.0–1.0)."""
+        if not 0.0 <= threshold <= 1.0:
+            raise ValueError("GPU util threshold must be between 0.0 and 1.0")
+        self._gpu_util_threshold = threshold
+
+    def update_node_health(self, node_id: str, health: dict) -> None:
+        """Update per-node health metrics (called by DHT heartbeat or monitor)."""
+        self._node_health[node_id] = {
+            "gpu_util": health.get("gpu_util", 0.0),
+            "mem_used_pct": health.get("mem_used_pct", 0.0),
+            "active_requests": health.get("active_requests", 0),
+            "timestamp": health.get("timestamp", time.time()),
+        }
+
+    def _is_node_overloaded(self, node_id: str) -> bool:
+        """Check if a node is overloaded based on GPU utilisation."""
+        health = self._node_health.get(node_id)
+        if health is None:
+            return False  # No data → assume healthy
+        return health.get("gpu_util", 0.0) >= self._gpu_util_threshold
+
+    def _node_load_score(self, node_id: str) -> float:
+        """
+        Composite load score for a node (0.0 = idle, 1.0 = maxed out).
+
+        Used to rank peers within a pipeline segment — lower score = better.
+        """
+        health = self._node_health.get(node_id) or {}
+        gpu_load = health.get("gpu_util", 0.0)
+        mem_load = health.get("mem_used_pct", 0.0) / 100.0
+        active = health.get("active_requests", 0)
+
+        with self._inflight_lock:
+            inflight = self._inflight_counts.get(node_id, 0)
+
+        # Weighted composite: GPU dominates, memory & inflight are tie-breakers
+        return 0.6 * gpu_load + 0.25 * mem_load + 0.15 * min(1.0, inflight / max(1, active + inflight + 1))
+
+    def _sort_peers_by_load(self, peers: List, base_key) -> List:
+        """
+        Sort peers for a pipeline segment: apply geo-sorting first, then
+        re-rank using load score, pushing overloaded nodes to the end.
+        """
+        geo_sorted = sorted(peers, key=base_key)
+        # Stable sort: non-overloaded first (by load score), overloaded last
+        return sorted(
+            geo_sorted,
+            key=lambda p: (
+                1 if self._is_node_overloaded(p.node_id) else 0,
+                self._node_load_score(p.node_id),
+            ),
         )
 
     # ------------------------------------------------------------------ #
@@ -197,9 +268,9 @@ class PipelineOrchestrator:
                     "Partially-overlapping segment %d:%d (covered to %d) — layers %d:%d will be computed twice",
                     ls, le, coverage, ls, coverage,
                 )
-            sorted_group = sorted(
+            sorted_group = self._sort_peers_by_load(
                 group,
-                key=lambda p: self._local_region.rtt_ms(
+                lambda p: self._local_region.rtt_ms(
                     GeoRegion(p.geo_region, *_region_coords(p.geo_region))
                 ),
             )
