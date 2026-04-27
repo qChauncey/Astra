@@ -204,7 +204,7 @@ class TestGlobalSingleton:
     def test_get_tokenizer_returns_instance(self):
         with patch("astra.inference.tokenizer._GLOBAL", None):
             with patch("astra.inference.tokenizer.load_tokenizer",
-                       return_value=load_tokenizer(offline=True)) as mock_load:
+                       return_value=load_tokenizer(offline=True)):
                 tok = get_tokenizer()
         assert isinstance(tok, AstraTokenizer)
 
