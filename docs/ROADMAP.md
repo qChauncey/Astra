@@ -228,10 +228,10 @@ GPU hardware, and real production workloads to design and validate.
 
 | Task | Status | Note |
 |------|--------|------|
-| CI workflow: `.github/workflows/hardware_test.yml` | ✅ Ready to create | Self-hosted runner config — implementable now, requires runner tag later |
-| Benchmark tooling: `scripts/benchmark.py` | ✅ Ready to create | Token/s throughput, P50/P99 latency, gRPC profiling harness |
-| Docker Compose multi-node deployment | ✅ Ready to create | `docker-compose.yml` for local multi-node cluster simulation |
-| Load-test script: `scripts/load_test.py` | ✅ Ready to create | locust-based 100-concurrent-request smoke test |
+| CI workflow: `.github/workflows/hardware_test.yml` | ✓ Done | Self-hosted runner config — requires runner tag to execute |
+| Benchmark tooling: `scripts/benchmark.py` | ✓ Done | Token/s throughput, P50/P95/P99 latency; single/gRPC/API modes |
+| Docker Compose multi-node deployment | ✓ Done | `docker-compose.yml` — 4-service cluster (3 nodes + gateway) |
+| Load-test script: `scripts/load_test.py` | ✓ Done | asyncio+httpx concurrent load driver; SLA thresholds; JSON output |
 
 ### 7.2 Inference Engine 🔒 Hardware-Blocked
 
@@ -295,7 +295,7 @@ GPU hardware, and real production workloads to design and validate.
 | Unit (CPU) | pytest | ✅ 389 passed + 1 skipped | Serialization, LRU cache, Haversine + real RTT, DHT, Engram, Peer Identity, Weight Manifest, gRPC TLS, HeterogeneousEngine, Tokenizer, KVTransfer, OpenAI API, Phase 6 dashboard |
 | Integration (local) | pytest + threading | ✅ Covered | mock_pipeline.py Phase 1 & 2 |
 | Hardware Integration | Self-hosted GPU Runner | ❌ Not configured | KTransformers C++ kernels, real-weight numerical alignment |
-| Load Test | locust / custom | ❌ Not implemented | 100 concurrent requests, throughput & P99 latency |
+| Load Test | scripts/load_test.py (asyncio+httpx) | ✅ Implemented | 100 concurrent requests, throughput & P99 latency |
 
 ### Pending Test Items
 

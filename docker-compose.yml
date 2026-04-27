@@ -1,0 +1,239 @@
+# Copyright 2025 Project Astra Contributors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# ── Astra Multi-Node Docker Compose ───────────────────────────────────────────
+#
+# Simulates a 3-node inference cluster + API gateway on a single machine.
+# All nodes use the numpy stub (no GPU required for local development/testing).
+#
+# Quick start:
+#
+#   docker compose up --build          # build + start all 4 services
+#   docker compose up -d               # detached mode
+#   docker compose logs -f node-a      # stream logs from one node
+#   docker compose down                # tear down
+#
+# Services:
+#   gateway  — API gateway (HTTP :8080)  — routes user requests
+#   node-a   — inference node A (gRPC :50051) — layers 0–20
+#   node-b   — inference node B (gRPC :50052) — layers 21–40
+#   node-c   — inference node C (gRPC :50053) — layers 41–60
+#
+# Optional GPU mode (requires NVIDIA Container Toolkit):
+#
+#   docker compose -f docker-compose.yml -f docker-compose.gpu.yml up
+#
+# Model weights (optional):
+#   Mount a directory containing DeepSeek-V4 safetensors shards and
+#   astra_manifest.json to /data/model inside the inference nodes.
+#   Set ASTRA_MODEL_DIR=/data/model in the node environment.
+# ─────────────────────────────────────────────────────────────────────────────
+
+version: "3.9"
+
+# ── Shared configuration ──────────────────────────────────────────────────────
+x-base-service: &base-service
+  build:
+    context: .
+    dockerfile: Dockerfile
+  restart: unless-stopped
+  networks:
+    - astra-net
+  environment:
+    ASTRA_USE_KTRANSFORMERS: "0"
+    PYTHONUNBUFFERED: "1"
+    ASTRA_LOG_LEVEL: "INFO"
+
+# ── Services ──────────────────────────────────────────────────────────────────
+services:
+
+  # ── DHT seed node — bootstraps peer discovery ────────────────────────────
+  dht-seed:
+    <<: *base-service
+    container_name: astra-dht-seed
+    hostname: dht-seed
+    command:
+      - python
+      - scripts/run_node.py
+      - --node-id=dht-seed
+      - --port=50050
+      - --layer-start=0
+      - --layer-end=0
+      - --hidden-dim=7168
+    ports:
+      - "50050:50050"
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import socket; s=socket.create_connection(('localhost',50050),2)"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  # ── Inference node A — layers 0–20 ───────────────────────────────────────
+  node-a:
+    <<: *base-service
+    container_name: astra-node-a
+    hostname: node-a
+    depends_on:
+      dht-seed:
+        condition: service_healthy
+    command:
+      - python
+      - scripts/run_node.py
+      - --node-id=node-a
+      - --port=50051
+      - --layer-start=0
+      - --layer-end=20
+      - --hidden-dim=7168
+      - --geo-region=us-west
+    environment:
+      ASTRA_USE_KTRANSFORMERS: "0"
+      PYTHONUNBUFFERED: "1"
+      ASTRA_DHT_BOOTSTRAP: "dht-seed:50050"
+    ports:
+      - "50051:50051"
+    volumes:
+      - model-weights:/data/model:ro
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import socket; s=socket.create_connection(('localhost',50051),2)"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  # ── Inference node B — layers 21–40 ──────────────────────────────────────
+  node-b:
+    <<: *base-service
+    container_name: astra-node-b
+    hostname: node-b
+    depends_on:
+      dht-seed:
+        condition: service_healthy
+    command:
+      - python
+      - scripts/run_node.py
+      - --node-id=node-b
+      - --port=50052
+      - --layer-start=21
+      - --layer-end=40
+      - --hidden-dim=7168
+      - --geo-region=us-west
+    environment:
+      ASTRA_USE_KTRANSFORMERS: "0"
+      PYTHONUNBUFFERED: "1"
+      ASTRA_DHT_BOOTSTRAP: "dht-seed:50050"
+    ports:
+      - "50052:50052"
+    volumes:
+      - model-weights:/data/model:ro
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import socket; s=socket.create_connection(('localhost',50052),2)"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  # ── Inference node C — layers 41–60 ──────────────────────────────────────
+  node-c:
+    <<: *base-service
+    container_name: astra-node-c
+    hostname: node-c
+    depends_on:
+      dht-seed:
+        condition: service_healthy
+    command:
+      - python
+      - scripts/run_node.py
+      - --node-id=node-c
+      - --port=50053
+      - --layer-start=41
+      - --layer-end=61
+      - --hidden-dim=7168
+      - --geo-region=us-east
+    environment:
+      ASTRA_USE_KTRANSFORMERS: "0"
+      PYTHONUNBUFFERED: "1"
+      ASTRA_DHT_BOOTSTRAP: "dht-seed:50050"
+    ports:
+      - "50053:50053"
+      - "50054:50054"
+    volumes:
+      - model-weights:/data/model:ro
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import socket; s=socket.create_connection(('localhost',50053),2)"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  # ── API gateway — HTTP :8080, routes to inference nodes ──────────────────
+  gateway:
+    <<: *base-service
+    container_name: astra-gateway
+    hostname: gateway
+    depends_on:
+      node-a:
+        condition: service_healthy
+      node-b:
+        condition: service_healthy
+      node-c:
+        condition: service_healthy
+    command:
+      - python
+      - scripts/run_node.py
+      - --node-id=gateway
+      - --port=50055
+      - --layer-start=0
+      - --layer-end=0
+      - --hidden-dim=7168
+      - --api-port=8080
+    environment:
+      ASTRA_USE_KTRANSFORMERS: "0"
+      PYTHONUNBUFFERED: "1"
+      ASTRA_DHT_BOOTSTRAP: "dht-seed:50050"
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+# ── Networks ──────────────────────────────────────────────────────────────────
+networks:
+  astra-net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16
+
+# ── Volumes ───────────────────────────────────────────────────────────────────
+volumes:
+  model-weights:
+    # Bind-mount your DeepSeek-V4 safetensors shards here, e.g.:
+    #   docker volume create --driver local \
+    #     --opt type=none --opt device=/mnt/fast-nvme/deepseek-v4 \
+    #     --opt o=bind astra_model-weights
+    #
+    # Or mount inline by overriding in docker-compose.override.yml:
+    #   services:
+    #     node-a:
+    #       volumes:
+    #         - /mnt/fast-nvme/deepseek-v4:/data/model:ro

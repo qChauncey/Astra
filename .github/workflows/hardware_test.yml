@@ -1,0 +1,205 @@
+# Copyright 2025 Project Astra Contributors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# ── Hardware CI — GPU Integration Tests ───────────────────────────────────────
+#
+# Runs on a self-hosted runner tagged `[self-hosted, gpu, cuda]`.
+# Triggered by:
+#   1. Push to main that touches astra/inference/ or astra/rpc/
+#   2. Workflow dispatch (manual trigger)
+#   3. PR label "gpu-test" added
+#
+# Runner requirements (one-time setup per machine):
+#   1. Register runner:  Settings → Actions → Runners → New self-hosted runner
+#   2. Add labels:       self-hosted, gpu, cuda, linux
+#   3. CUDA Toolkit ≥ 12.1 installed on the machine
+#   4. Python 3.11 available at /usr/bin/python3.11
+#   5. ~600 GB free disk for DeepSeek-V4 weights (if running weight tests)
+#
+# See docs/TESTING.md §Hardware CI for full setup checklist.
+# ─────────────────────────────────────────────────────────────────────────────
+
+name: Hardware CI (GPU)
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - "astra/inference/**"
+      - "astra/rpc/**"
+      - "astra/routing/**"
+      - "tests/test_heterogeneous.py"
+      - "tests/test_pipeline_grpc.py"
+  pull_request:
+    types: [labeled]
+  workflow_dispatch:
+    inputs:
+      run_weight_tests:
+        description: "Run real-weight alignment tests (requires weights on runner)"
+        required: false
+        default: "false"
+        type: boolean
+
+# Cancel in-progress runs when a newer commit arrives on the same branch.
+concurrency:
+  group: hardware-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ── GPU environment validation ──────────────────────────────────────────────
+  check-gpu:
+    name: "GPU Sanity Check"
+    runs-on: [self-hosted, gpu, cuda, linux]
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'push') ||
+      (github.event_name == 'pull_request' && github.event.label.name == 'gpu-test')
+    steps:
+      - name: Check CUDA availability
+        run: |
+          nvidia-smi
+          nvcc --version
+
+      - name: Check Python version
+        run: python3 --version
+
+  # ── KTransformers stub alignment tests ─────────────────────────────────────
+  ktransformers-stub:
+    name: "KTransformers Stub Alignment"
+    runs-on: [self-hosted, gpu, cuda, linux]
+    needs: check-gpu
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install CPU dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -e ".[proto]"
+          pip install pytest pytest-cov
+
+      - name: Install PyTorch (CUDA)
+        run: pip install torch --index-url https://download.pytorch.org/whl/cu124
+
+      - name: Run heterogeneous engine tests with CUDA
+        env:
+          ASTRA_USE_KTRANSFORMERS: "0"
+        run: python -m pytest tests/test_heterogeneous.py -v --tb=short
+
+      - name: Run gRPC pipeline tests with CUDA backend
+        env:
+          ASTRA_USE_KTRANSFORMERS: "0"
+        run: python -m pytest tests/test_pipeline_grpc.py -v --tb=short
+
+      - name: Mock pipeline Phase 1 smoke test
+        run: python mock_pipeline.py --phase 1 --seq-len 32 --hidden-dim 256
+
+      - name: Mock pipeline Phase 2 smoke test
+        run: python mock_pipeline.py --phase 2 --seq-len 32 --hidden-dim 256
+
+  # ── Benchmark — token throughput & latency profiling ───────────────────────
+  benchmark:
+    name: "Benchmark (Token Throughput)"
+    runs-on: [self-hosted, gpu, cuda, linux]
+    needs: ktransformers-stub
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -e ".[proto]"
+          pip install uvicorn
+
+      - name: Run benchmark harness (stub mode)
+        run: |
+          python scripts/benchmark.py \
+            --mode single \
+            --seq-len 64 \
+            --hidden-dim 256 \
+            --num-warmup 5 \
+            --num-runs 50 \
+            --output benchmark_results.json
+          cat benchmark_results.json
+
+      - name: Upload benchmark results
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results-${{ github.sha }}
+          path: benchmark_results.json
+          retention-days: 90
+
+  # ── Real-weight numerical alignment tests ──────────────────────────────────
+  # Skipped unless workflow_dispatch with run_weight_tests=true AND weights present.
+  real-weights:
+    name: "Real-Weight Numerical Alignment"
+    runs-on: [self-hosted, gpu, cuda, linux]
+    needs: ktransformers-stub
+    if: ${{ inputs.run_weight_tests == 'true' }}
+    env:
+      ASTRA_USE_KTRANSFORMERS: "1"
+      ASTRA_MODEL_DIR: "/data/deepseek-v4-flash"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install GPU dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -e ".[proto,gpu]"
+          pip install ktransformers safetensors transformers
+
+      - name: Verify model weights are present
+        run: |
+          test -d "$ASTRA_MODEL_DIR" || \
+            (echo "Model weights not found at $ASTRA_MODEL_DIR — skipping"; exit 0)
+
+      - name: Verify weight manifest (SHA-256 integrity check)
+        run: |
+          python - <<'EOF'
+          from astra.inference.weight_manifest import find_manifest, WeightManifest
+          import os, sys
+          model_dir = os.environ["ASTRA_MODEL_DIR"]
+          manifest_path = find_manifest(model_dir)
+          if manifest_path is None:
+              print("No manifest found — skipping integrity check")
+              sys.exit(0)
+          manifest = WeightManifest.load(manifest_path)
+          results = manifest.verify_dir(model_dir, require_all=False)
+          failed = {k: v for k, v in results.items() if not v}
+          if failed:
+              print(f"INTEGRITY FAILED: {failed}")
+              sys.exit(1)
+          print(f"All {len(results)} verified shards pass SHA-256 check.")
+          EOF
+
+      - name: Run weight-alignment tests
+        run: |
+          python -m pytest tests/ -v -m "not integration" --tb=short
