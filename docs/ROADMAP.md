@@ -279,8 +279,8 @@ GPU hardware, and real production workloads to design and validate.
 |-----------|---------------|-------------------|
 | Tensor compute | numpy stub | KTransformers C++ + CUDA |
 | Attention kernel | numpy `@` matmul | `ktransformers.ops.mla_forward` |
-| DHT | in-memory dict | `hivemind.DHT` |
-| Transport | gRPC | gRPC with mTLS (done — Phase 5) |
+| DHT | in-memory dict / `HivemindDHT` (Phase 5 done) | `hivemind.DHT` |
+| Transport | gRPC | gRPC with mTLS (done — Phase 5) ✅ |
 | Model weights | random arrays | DeepSeek-V4 safetensors shards |
 | Memory | 16–64 GB RAM | 512 GB+ NVMe-backed mmap |
 
@@ -288,23 +288,23 @@ GPU hardware, and real production workloads to design and validate.
 
 ## Testing Strategy
 
-> 详细方案见 [docs/TESTING.md](TESTING.md)
+> See [docs/TESTING.md](TESTING.md) for detailed plan
 
-| 层级 | 工具 | 当前状态 | 覆盖目标 |
+| Layer | Tool | Current Status | Coverage Target |
 |-----|------|---------|---------|
-| 单元测试（CPU） | pytest | ✅ 389 passed + 1 skipped | 序列化、LRU 缓存、Haversine + 真实 RTT、DHT、Engram、Peer Identity、Weight Manifest、gRPC TLS、HeterogeneousEngine、Tokenizer、KVTransfer、OpenAI API、Phase 6 dashboard |
-| 集成测试（本地） | pytest + threading | ✅ 已覆盖 | mock_pipeline.py Phase 1 & 2 |
-| 硬件集成测试 | 自托管 GPU Runner | ❌ 未配置 | KTransformers C++ 内核、真实权重数值对齐 |
-| 负载测试 | locust / 自定义 | ❌ 未实现 | 100 并发请求，吞吐量与 P99 延迟 |
+| Unit (CPU) | pytest | ✅ 389 passed + 1 skipped | Serialization, LRU cache, Haversine + real RTT, DHT, Engram, Peer Identity, Weight Manifest, gRPC TLS, HeterogeneousEngine, Tokenizer, KVTransfer, OpenAI API, Phase 6 dashboard |
+| Integration (local) | pytest + threading | ✅ Covered | mock_pipeline.py Phase 1 & 2 |
+| Hardware Integration | Self-hosted GPU Runner | ❌ Not configured | KTransformers C++ kernels, real-weight numerical alignment |
+| Load Test | locust / custom | ❌ Not implemented | 100 concurrent requests, throughput & P99 latency |
 
-### 待完成测试项（Pending）
+### Pending Test Items
 
-| 测试文件 | 状态 | 说明 |
+| Test File | Status | Notes |
 |---------|------|-----|
-| `tests/test_heterogeneous.py` | ✅ 完成 | `HeterogeneousEngine` 直接单元测试（23 项） |
-| `tests/test_kv_transfer.py` | ✅ 完成 | KV 缓存分块传输与重组（20 项） |
-| `tests/test_api.py` | ✅ 完成 | OpenAI API 端点（httpx AsyncClient）（23 项） |
-| `.github/workflows/hardware_test.yml` | ❌ 待创建 | 自托管 GPU Runner CI 配置 |
+| `tests/test_heterogeneous.py` | ✅ Done | `HeterogeneousEngine` direct unit tests (23 items) |
+| `tests/test_kv_transfer.py` | ✅ Done | KV-cache chunked transfer & reassembly (20 items) |
+| `tests/test_api.py` | ✅ Done | OpenAI API endpoints (httpx AsyncClient) (23 items) |
+| `.github/workflows/hardware_test.yml` | ❌ Pending | Self-hosted GPU Runner CI config |
 
 ---
 

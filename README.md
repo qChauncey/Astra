@@ -39,26 +39,18 @@
 
 ## Architecture
 
-```
-┌──────────────┐     HTTP/SSE      ┌──────────────┐
-│   User /     │ ────────────────→  │  API Gateway │
-│  OpenAI SDK  │ ←──────────────── │  /v1/chat/   │
-└──────────────┘    tokens/stream   └──────┬───────┘
-                                           │ TensorPacket gRPC
-                              ┌────────────┼────────────┐
-                              │            │            │
-                         ┌────▼────┐ ┌────▼────┐ ┌────▼────┐
-                         │ Node A  │ │ Node B  │ │ Node C  │
-                         │ GPU:MLA │→│ GPU:MLA │→│ GPU:MLA │
-                         │ CPU:MoE │ │ CPU:MoE │ │ CPU:MoE │
-                         └─────────┘ └─────────┘ └─────────┘
-                              │            │            │
-                              └────────────┼────────────┘
-                                      KV-cache stream
-                              ┌────────────────────────┐
-                              │   hivemind DHT Mesh     │
-                              │  Peer discovery + KV   │
-                              └────────────────────────┘
+```mermaid
+graph TD
+    User["🖥️ User / OpenAI SDK"] -->|HTTP/SSE| Gateway["🌐 API Gateway<br/>/v1/chat/completions"]
+    Gateway -->|TensorPacket gRPC| Orch["⚙️ Pipeline Orchestrator<br/>DHT → layer coverage → N-hop chain"]
+    Orch --> NodeA["🖥️ Node A<br/>GPU: MLA<br/>CPU: MoE"]
+    Orch --> NodeB["🖥️ Node B<br/>GPU: MLA<br/>CPU: MoE"]
+    Orch --> NodeC["🖥️ Node C<br/>GPU: MLA<br/>CPU: MoE"]
+    NodeA -->|KV-cache| NodeB
+    NodeB -->|KV-cache| NodeC
+    NodeA <-->|Peer discovery| DHT["🔗 hivemind DHT Mesh<br/>Peer Discovery + KV Storage"]
+    NodeB <-->|Peer discovery| DHT
+    NodeC <-->|Peer discovery| DHT
 ```
 
 **Per-Node Compute Split (KTransformers model):** GPU handles MLA attention, RoPE, LayerNorm → hidden states flow to CPU RAM → CPU handles MoE FFN (shared experts 0 & 1 pinned, routed experts LRU-paged) → TensorPacket to next node.
@@ -67,21 +59,48 @@
 
 ## Core Modules
 
+### 🧠 Inference Engine
+
 | Module | Purpose |
 |--------|---------|
 | `astra.inference.HeterogeneousEngine` | GPU attention + CPU MoE FFN compute split |
 | `astra.inference.SharedExpertCache` | LRU cache; experts 0 & 1 permanently pinned |
+
+### 🔐 Security & Privacy
+
+| Module | Purpose |
+|--------|---------|
 | `astra.inference.DPController` | Differential privacy: per-layer noise injection, ε/δ budget tracking |
-| `astra.routing.GeoAwareMoERouter` | Token-level `(token, expert_id) → nearest_node` via haversine RTT |
-| `astra.rpc.InferenceServer/Client` | gRPC pipeline: pack → CRC32 verify → compute → deserialize |
-| `astra.rpc.TLSConfig` | mTLS certificate management, mutual authentication |
-| `astra.network.AstraDHT` | Peer discovery + generic KV API (hivemind compatible) |
-| `astra.network.HivemindBridge` | Multi-machine DHT bootstrap and cross-machine discovery |
-| `astra.network.PipelineOrchestrator` | DHT → layer coverage → retry-safe N-hop chaining |
-| `astra.network.PeerIdentity` | Ed25519 node signing + TOFU key registry |
-| `astra.network.EngramNode` | Storage-only DHT peer: KV-cache / weight shards |
 | `astra.tee.GramineBackend` | Intel SGX TEE: attestation, model sealing |
 | `astra.tee.SevBackend` | AMD SEV-SNP: attestation, secure model loading |
+| `astra.rpc.TLSConfig` | mTLS certificate management, mutual authentication |
+
+### 🗺️ Routing & Orchestration
+
+| Module | Purpose |
+|--------|---------|
+| `astra.routing.GeoAwareMoERouter` | Token-level `(token, expert_id) → nearest_node` via haversine RTT |
+| `astra.network.PipelineOrchestrator` | DHT → layer coverage → retry-safe N-hop chaining |
+
+### 🌐 P2P Network
+
+| Module | Purpose |
+|--------|---------|
+| `astra.network.AstraDHT` | Peer discovery + generic KV API (hivemind compatible) |
+| `astra.network.HivemindBridge` | Multi-machine DHT bootstrap and cross-machine discovery |
+| `astra.network.PeerIdentity` | Ed25519 node signing + TOFU key registry |
+| `astra.network.EngramNode` | Storage-only DHT peer: KV-cache / weight shards |
+
+### 🔌 RPC & Transport
+
+| Module | Purpose |
+|--------|---------|
+| `astra.rpc.InferenceServer/Client` | gRPC pipeline: pack → CRC32 verify → compute → deserialize |
+
+### 🎨 API & UI
+
+| Module | Purpose |
+|--------|---------|
 | `astra.api.openai_compat` | OpenAI `/v1/chat/completions` + SSE streaming |
 | `astra.api.static/index.html` | SPA dashboard: Chat, Monitor, Login, Earnings |
 
@@ -95,9 +114,9 @@ Jump to your platform's installation guide → **[docs/INSTALL.md](docs/INSTALL.
 |----------|---------------|
 | 🐧 **Linux** | [Linux install](docs/INSTALL.md#linux) |
 | 🍎 **macOS** | [macOS install](docs/INSTALL.md#macos) |
-| 🪟 **Windows (no GPU)** | [Windows native](docs/INSTALL.md#windows---无-gpu原生-no-gpu-native) |
-| 🪟 **Windows + GPU (WSL2)** | [WSL2 + CUDA](docs/INSTALL.md#windows---gpu-推理-via-wsl2) |
-| 🚀 **Windows one-click installer** | [One-click install](docs/INSTALL.md#一键安装windows-one-click-install-windows) |
+| 🪟 **Windows (no GPU)** | [Windows native](docs/INSTALL.md#windows-native) |
+| 🪟 **Windows + GPU (WSL2)** | [WSL2 + CUDA](docs/INSTALL.md#windows-gpu-wsl2) |
+| 🚀 **Windows one-click installer** | [One-click install](docs/INSTALL.md#one-click-windows) |
 
 After setup, run the mock pipeline to verify everything works:
 

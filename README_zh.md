@@ -1,4 +1,4 @@
-# Astra — DeepSeek-V4 分布式 P2P 推理
+# Astra — 面向 DeepSeek-V4 的分布式 P2P 推理框架
 
 <div align="right">
   <a href="README.md"><b>English</b></a> ·
@@ -17,7 +17,7 @@
 - **[KTransformers](https://github.com/kvcache-ai/ktransformers)** 式的异构 GPU/CPU 计算拆分
 - **[hivemind](https://github.com/learning-at-home/hivemind)** DHT 用于节点发现和键值存储
 
-> **Alpha 阶段。** Phase 1–6 已完成并通过测试（389 通过，1 跳过，CPU/NumPy CI 全部通过）。Phase 7（推理性能调优：连续批处理、投机解码、KTransformers C++ 绑定、专家复制）受硬件限制：需要 GPU 集群和 DeepSeek-V4 权重才能设计和验证。
+> **Alpha 阶段。** Phase 1–6 已完成并通过测试（389 通过，1 跳过，CPU/NumPy CI 全部通过）。Phase 7（推理性能调优：连续批处理、投机解码、KTransformers C++ 绑定、专家复制）受硬件限制——需要 GPU 集群和 DeepSeek-V4 权重才能设计和验证。
 
 ---
 
@@ -26,7 +26,7 @@
 | 阶段 | 范围 | 状态 |
 |------|------|------|
 | **Phase 1** | 本地异构单节点推理（NumPy 存根 + SharedExpertCache） | ✅ 已完成 |
-| **Phase 2** | 局域网双节点 gRPC 流水线（打包→传输→计算→接收 循环） | ✅ 已完成 |
+| **Phase 2** | 局域网双节点 gRPC 流水线（打包 → 传输 → 计算 → 接收 循环） | ✅ 已完成 |
 | **Phase 3** | 完整 P2P 网络：AstraDHT、N 节点编排、OpenAI API、权重清单、RTT 监控、节点身份、Engram 节点 | ✅ 已完成 |
 | **Phase 4** | 差分隐私（ε/δ 预算、逐层噪声）、TEE（Intel SGX + AMD SEV-SNP） | ✅ 已完成 |
 | **Phase 5** | gRPC TLS 双向认证 + hivemind 多机 DHT 集成 | ✅ 已完成 |
@@ -39,26 +39,18 @@
 
 ## 系统架构
 
-```
-┌──────────────┐     HTTP/SSE      ┌──────────────┐
-│   用户 /     │ ────────────────→  │  API 网关    │
-│  OpenAI SDK  │ ←──────────────── │  /v1/chat/   │
-└──────────────┘    tokens/stream   └──────┬───────┘
-                                           │ TensorPacket gRPC
-                              ┌────────────┼────────────┐
-                              │            │            │
-                         ┌────▼────┐ ┌────▼────┐ ┌────▼────┐
-                         │ 节点 A  │ │ 节点 B  │ │ 节点 C  │
-                         │ GPU:MLA │→│ GPU:MLA │→│ GPU:MLA │
-                         │ CPU:MoE │ │ CPU:MoE │ │ CPU:MoE │
-                         └─────────┘ └─────────┘ └─────────┘
-                              │            │            │
-                              └────────────┼────────────┘
-                                      KV-cache 流
-                              ┌────────────────────────┐
-                              │   hivemind DHT 网格     │
-                              │  节点发现 + KV 存储    │
-                              └────────────────────────┘
+```mermaid
+graph TD
+    User["🖥️ 用户 / OpenAI SDK"] -->|HTTP/SSE| Gateway["🌐 API 网关<br/>/v1/chat/completions"]
+    Gateway -->|TensorPacket gRPC| Orch["⚙️ 流水线编排器<br/>DHT → 层覆盖率 → N 跳链路"]
+    Orch --> NodeA["🖥️ 节点 A<br/>GPU: MLA<br/>CPU: MoE"]
+    Orch --> NodeB["🖥️ 节点 B<br/>GPU: MLA<br/>CPU: MoE"]
+    Orch --> NodeC["🖥️ 节点 C<br/>GPU: MLA<br/>CPU: MoE"]
+    NodeA -->|KV-cache| NodeB
+    NodeB -->|KV-cache| NodeC
+    NodeA <-->|节点发现| DHT["🔗 hivemind DHT 网格<br/>节点发现 + KV 存储"]
+    NodeB <-->|节点发现| DHT
+    NodeC <-->|节点发现| DHT
 ```
 
 **单节点计算拆分（KTransformers 模型）：** GPU 处理 MLA 注意力、RoPE、LayerNorm → 隐状态流入 CPU RAM → CPU 处理 MoE FFN（共享专家 0 和 1 固定常驻，路由专家 LRU 换页）→ TensorPacket 发往下个节点。
@@ -67,21 +59,48 @@
 
 ## 核心模块
 
+### 🧠 推理引擎
+
 | 模块 | 功能 |
 |------|------|
 | `astra.inference.HeterogeneousEngine` | GPU 注意力 + CPU MoE FFN 计算拆分 |
 | `astra.inference.SharedExpertCache` | LRU 缓存；专家 0 和 1 永久固定 |
+
+### 🔐 安全与隐私
+
+| 模块 | 功能 |
+|------|------|
 | `astra.inference.DPController` | 差分隐私：逐层噪声注入、ε/δ 预算追踪 |
-| `astra.routing.GeoAwareMoERouter` | Token 级 `(token, expert_id) → nearest_node`，基于 haversine RTT |
-| `astra.rpc.InferenceServer/Client` | gRPC 流水线：打包 → CRC32 校验 → 计算 → 反序列化 |
-| `astra.rpc.TLSConfig` | mTLS 证书管理、双向认证 |
-| `astra.network.AstraDHT` | 节点发现 + 通用 KV API（兼容 hivemind） |
-| `astra.network.HivemindBridge` | 多机 DHT 引导和跨机器发现 |
-| `astra.network.PipelineOrchestrator` | DHT → 层覆盖率 → 防重试 N 跳链路编排 |
-| `astra.network.PeerIdentity` | Ed25519 节点签名 + TOFU 密钥注册表 |
-| `astra.network.EngramNode` | 仅存储 DHT 节点：KV 缓存 / 权重分片 |
 | `astra.tee.GramineBackend` | Intel SGX TEE：远程证明、模型密封 |
 | `astra.tee.SevBackend` | AMD SEV-SNP：远程证明、安全模型加载 |
+| `astra.rpc.TLSConfig` | mTLS 证书管理、双向认证 |
+
+### 🗺️ 路由与编排
+
+| 模块 | 功能 |
+|------|------|
+| `astra.routing.GeoAwareMoERouter` | Token 级 `(token, expert_id) → nearest_node`，基于 haversine RTT |
+| `astra.network.PipelineOrchestrator` | DHT → 层覆盖率 → 防重试 N 跳链路编排 |
+
+### 🌐 P2P 网络
+
+| 模块 | 功能 |
+|------|------|
+| `astra.network.AstraDHT` | 节点发现 + 通用 KV API（兼容 hivemind） |
+| `astra.network.HivemindBridge` | 多机 DHT 引导和跨机器发现 |
+| `astra.network.PeerIdentity` | Ed25519 节点签名 + TOFU 密钥注册表 |
+| `astra.network.EngramNode` | 仅存储 DHT 节点：KV 缓存 / 权重分片 |
+
+### 🔌 RPC 传输
+
+| 模块 | 功能 |
+|------|------|
+| `astra.rpc.InferenceServer/Client` | gRPC 流水线：打包 → CRC32 校验 → 计算 → 反序列化 |
+
+### 🎨 API 与界面
+
+| 模块 | 功能 |
+|------|------|
 | `astra.api.openai_compat` | OpenAI `/v1/chat/completions` + SSE 流式输出 |
 | `astra.api.static/index.html` | SPA 仪表盘：聊天、监控、登录、收益 |
 
@@ -95,9 +114,9 @@
 |------|----------|
 | 🐧 **Linux** | [Linux 安装](docs/INSTALL.md#linux) |
 | 🍎 **macOS** | [macOS 安装](docs/INSTALL.md#macos) |
-| 🪟 **Windows（无 GPU）** | [Windows 原生安装](docs/INSTALL.md#windows---无-gpu原生-no-gpu-native) |
-| 🪟 **Windows + GPU（WSL2）** | [WSL2 + CUDA](docs/INSTALL.md#windows---gpu-推理-via-wsl2) |
-| 🚀 **Windows 一键安装器** | [一键安装](docs/INSTALL.md#一键安装windows-one-click-install-windows) |
+| 🪟 **Windows（无 GPU）** | [Windows 原生](docs/INSTALL.md#windows-原生) |
+| 🪟 **Windows + GPU（WSL2）** | [WSL2 + CUDA](docs/INSTALL.md#windows-gpu-wsl2) |
+| 🚀 **Windows 一键安装器** | [一键安装](docs/INSTALL.md#一键安装windows) |
 
 安装完成后，运行模拟管线验证环境：
 
