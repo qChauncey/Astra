@@ -119,9 +119,9 @@ def generate_self_signed_cert_bundle(
         .issuer_name(issuer)
         .public_key(private_key.public_key())
         .serial_number(x509.random_serial_number())
-        .not_valid_before(_dt.datetime.now(_dt.UTC))
+        .not_valid_before(_dt.datetime.now(_dt.timezone.utc))
         .not_valid_after(
-            _dt.datetime.now(_dt.UTC) + _dt.timedelta(days=days_valid)
+            _dt.datetime.now(_dt.timezone.utc) + _dt.timedelta(days=days_valid)
         )
         .add_extension(
             x509.SubjectAlternativeName([x509.DNSName(node_id)]),

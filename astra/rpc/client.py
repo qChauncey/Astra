@@ -34,7 +34,7 @@ from __future__ import annotations
 import logging
 import time
 import zlib
-from typing import Dict, Iterator, List
+from typing import Dict, Iterator, List, Optional
 
 import grpc
 
