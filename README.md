@@ -7,7 +7,7 @@
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org)
-[![Tests](https://img.shields.io/badge/tests-150%20passed-brightgreen)]()
+[![Tests](https://img.shields.io/badge/tests-239%20passed-brightgreen)]()
 [![CI](https://github.com/qchauncey/astra/actions/workflows/ci.yml/badge.svg)](.github/workflows/ci.yml)
 [![Status](https://img.shields.io/badge/status-Phase%204%20complete%2C%20Phase%205%20in%20progress-blue)]()
 
@@ -17,7 +17,7 @@
 - **[KTransformers](https://github.com/kvcache-ai/ktransformers)**-style heterogeneous GPU/CPU compute split
 - **[hivemind](https://github.com/learning-at-home/hivemind)** DHT for peer discovery and key-value storage
 
-> **Alpha.** Phase 1, 2 & 4 (local + dual-node gRPC pipeline + DP/TEE security hardening) are complete and tested. Phase 3 (full P2P network + API gateway) and Phase 5 (gRPC TLS + hivemind multi-machine DHT) are in progress.
+> **Alpha.** Phase 1, 2 & 4 (local + dual-node gRPC pipeline + DP/TEE security hardening) are complete and tested. Phase 3 (full P2P network + API gateway) is in progress. Phase 5 (gRPC TLS + hivemind multi-machine DHT) enters implementation.
 
 ---
 
@@ -330,7 +330,7 @@ scripts/
 ├── run_node.py                 # Production node launch CLI
 ├── run_cluster.py              # Single-machine multi-node cluster launcher (Phase 3 validation)
 └── check_env.py                # Environment readiness checker (prints node role eligibility)
-tests/                          # 150 pytest tests (all passing)
+tests/                          # 239 pytest tests (all passing)
 .github/workflows/ci.yml        # CI: Python 3.10/3.11/3.12 matrix + lint
 docs/
 ├── ARCHITECTURE.md             # Detailed design & wire format spec
@@ -364,7 +364,7 @@ docs/
 |-----|----------|
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | System design, data flow, wire format spec |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | Phase-by-phase plan (Phase 1 ✓ · Phase 2 ✓ · Phase 3 in progress) |
-| [docs/TESTING.md](docs/TESTING.md) | Test strategy: 150 tests covered + pending hardware test checklist |
+| [docs/TESTING.md](docs/TESTING.md) | Test strategy: 239 tests covered + pending hardware test checklist |
 | [docs/SECURITY.md](docs/SECURITY.md) | mTLS encryption, differential privacy, output tamper-proofing |
 | [docs/TEE.md](docs/TEE.md) | TEE deployment guide: Intel SGX (Gramine) & AMD SEV-SNP attestation flow |
 | [docs/FEASIBILITY.md](docs/FEASIBILITY.md) | Compute thresholds, geo micro-cluster tiers, bandwidth analysis |
@@ -380,8 +380,32 @@ docs/
 | **Phase 2** | LAN dual-node gRPC pipeline (pack → transmit → compute → receive loop) | ✅ Complete |
 | **Phase 3** | AstraDHT peer discovery, N-node orchestration, OpenAI API, KV-cache streaming | 🔄 In Progress |
 | **Phase 4** | Differential privacy (ε/δ budget, per-layer noise), TEE (Intel SGX + AMD SEV-SNP) | ✅ Complete |
-| **Phase 5** | gRPC TLS mutual auth + hivemind multi-machine DHT integration | 📋 Planned |
+| **Phase 5** | gRPC TLS mutual auth + hivemind multi-machine DHT integration | 🔄 In Progress |
 | **Phase 6** | Next.js / Electron frontend portal, decentralized login, compute monitoring | 📋 Planned |
+
+## Core Innovations
+
+### 1. Geographic Micro-Cluster Scheduling
+Node physical location (Haversine great-circle distance + propagation delay estimation) routes MoE expert requests to the nearest available peer, mitigating the blocking effect of high-frequency MoE network I/O.
+
+### 2. Heterogeneous Compute Engine (KTransformers Integration)
+- **GPU** handles: MLA attention layers, RoPE, LayerNorm, DSA operators
+- **CPU/RAM** handles: MoE expert weight FFN forward computation (all 256 expert weights memory-resident)
+- Set `ASTRA_USE_KTRANSFORMERS=1` to activate real C++ kernels; defaults to NumPy stubs for GPU-free development
+
+### 3. Shared Expert Pinning
+DeepSeek-V4's 2 shared experts fire on every token. Permanently pinned to GPU VRAM or high-speed RAM, eliminating repeated PCIe data movement overhead entirely.
+
+### 4. Decoupled Storage (Engram Memory Nodes)
+Built on AstraDHT (a hivemind DHT drop-in replacement), compute nodes and Engram storage nodes are fully decoupled — enabling independent scaling of distributed KV caches and model weight shards.
+
+---
+
+## Patent Protection
+
+This project is licensed under **Apache License 2.0**. Any entity that initiates patent litigation against the project or its contributors automatically forfeits all patent rights granted herein. See [LICENSE](LICENSE) for full terms.
+
+---
 
 ## Licensing
 

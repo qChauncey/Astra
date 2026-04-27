@@ -7,7 +7,7 @@
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org)
-[![Tests](https://img.shields.io/badge/tests-150%20passed-brightgreen)]()
+[![Tests](https://img.shields.io/badge/tests-239%20passed-brightgreen)]()
 [![CI](https://github.com/qchauncey/astra/actions/workflows/ci.yml/badge.svg)](.github/workflows/ci.yml)
 [![Status](https://img.shields.io/badge/状态-Phase%204%20已完成%2C%20Phase%205%20进行中-blue)]()
 
@@ -17,7 +17,7 @@
 - **[KTransformers](https://github.com/kvcache-ai/ktransformers)** 的 GPU/CPU 异构计算引擎
 - **[hivemind](https://github.com/learning-at-home/hivemind)** DHT 协议，用于节点发现与键值存储
 
-> **当前状态：Alpha 阶段。** 阶段 1、2、4（本地单机 + 双节点 gRPC 流水线 + DP/TEE 安全加固）已完成并通过测试。阶段 3（完整 P2P 网络 + API 网关）与阶段 5（gRPC TLS + hivemind 多机 DHT）正在推进中。
+> **当前状态：Alpha 阶段。** 阶段 1、2、4（本地单机 + 双节点 gRPC 流水线 + DP/TEE 安全加固）已完成并通过测试。阶段 3（完整 P2P 网络 + API 网关）正在推进中。阶段 5（gRPC TLS + hivemind 多机 DHT）进入实施阶段。
 
 ---
 
@@ -348,7 +348,7 @@ scripts/
 ├── run_node.py                 # 生产节点启动 CLI
 ├── run_cluster.py              # 单机多节点集群启动器（Phase 3 基础设施验证）
 └── check_env.py                # 环境依赖检查工具（含节点角色资格输出）
-tests/                          # 150 个 pytest 测试（全部通过）
+tests/                          # 239 个 pytest 测试（全部通过）
 .github/workflows/ci.yml        # CI：Python 3.10/3.11/3.12 矩阵 + lint
 docs/
 ├── ARCHITECTURE.md             # 详细系统设计与传输格式规范
@@ -382,7 +382,7 @@ docs/
 |-----|-----|
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 系统设计、数据流、传输格式规范 |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | 分阶段实施计划 |
-| [docs/TESTING.md](docs/TESTING.md) | 测试方案：已覆盖 150 项 + 待完成测试清单（含不可自动化的硬件测试项） |
+| [docs/TESTING.md](docs/TESTING.md) | 测试方案：已覆盖 239 项 + 待完成测试清单（含不可自动化的硬件测试项） |
 | [docs/SECURITY.md](docs/SECURITY.md) | 节点间加密（mTLS）、隐藏状态隐私保护、输出完整性验证、差分隐私 |
 | [docs/TEE.md](docs/TEE.md) | TEE 部署指南：Intel SGX（Gramine）与 AMD SEV-SNP 远程证明流程 |
 | [docs/FEASIBILITY.md](docs/FEASIBILITY.md) | 算力门槛、地理微集群划分规则、带宽需求、与同类项目对比 |
@@ -398,7 +398,7 @@ docs/
 | **Phase 2** | 局域网双机 gRPC 流水线（打包-传输-运算闭环） | ✅ 完成 |
 | **Phase 3** | AstraDHT 节点发现、N 节点编排、OpenAI API、KV 缓存流传输 | 🔄 进行中 |
 | **Phase 4** | 差分隐私（ε/δ 预算 + 逐层噪声）+ TEE（Intel SGX + AMD SEV-SNP） | ✅ 完成 |
-| **Phase 5** | gRPC TLS 安全认证 + hivemind 多机 DHT 集成 | 📋 规划中 |
+| **Phase 5** | gRPC TLS 安全认证 + hivemind 多机 DHT 集成 | 🔄 进行中 |
 | **Phase 6** | Next.js / Electron 前端门户，去中心化登录，算力监控 | 📋 规划中 |
 
 ---

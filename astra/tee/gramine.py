@@ -172,8 +172,10 @@ class GramineBackend(TEEBackend):
                 try:
                     with open("/proc/cpuinfo") as f:
                         if "sgx" not in f.read().lower():
+                            self._enclave_measurement = self._compute_dummy_mrenclave()
                             return TEEStatus.UNAVAILABLE
                 except Exception:
+                    self._enclave_measurement = self._compute_dummy_mrenclave()
                     return TEEStatus.UNKNOWN
 
         # Check for Gramine toolchain
