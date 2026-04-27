@@ -7,7 +7,7 @@
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org)
-[![Tests](https://img.shields.io/badge/tests-239%20passed-brightgreen)]()
+[![Tests](https://img.shields.io/badge/tests-259%20passed-brightgreen)]()
 [![CI](https://github.com/qchauncey/astra/actions/workflows/ci.yml/badge.svg)](.github/workflows/ci.yml)
 [![Status](https://img.shields.io/badge/状态-Phase%204%20已完成%2C%20Phase%205%20进行中-blue)]()
 
@@ -299,18 +299,18 @@ flowchart TB
 
 ## 核心创新点
 
-### 2.1 地理微集群调度
+### 1. 地理微集群调度
 基于节点的物理位置（Haversine 大圆距离 + 传播延迟估算）将 MoE 专家请求优先分发到距离最近的节点，有效对冲 MoE 高频网络 I/O 造成的阻塞。
 
-### 2.2 异构计算引擎（KTransformers 集成）
+### 2. 异构计算引擎（KTransformers 集成）
 - **GPU** 负责：MLA 注意力层、RoPE、LayerNorm、DSA 算子
 - **CPU/RAM** 负责：MoE 专家权重的 FFN 前向计算（全部 256 个专家权重常驻内存）
 - 通过 `ASTRA_USE_KTRANSFORMERS=1` 激活真实 C++ 内核；默认使用 NumPy 存根，可在无 GPU 环境下完整运行
 
-### 2.3 共享专家常驻（Shared Expert Pinning）
+### 3. 共享专家常驻（Shared Expert Pinning）
 DeepSeek-V4 的 2 个共享专家在每个 Token 计算时必然触发。将其永久固定于 GPU 显存或高速内存中，彻底消除频繁的 PCIe 数据搬运开销。
 
-### 2.4 存储分离（Engram 记忆节点）
+### 4. 存储分离（Engram 记忆节点）
 基于 AstraDHT（hivemind DHT 的兼容替代），计算节点与 Engram 存储节点相互解耦，支持分布式 KV 缓存与模型权重分片的独立扩缩容。
 
 ---
@@ -336,6 +336,7 @@ astra/
 │   ├── generated/              # 自动生成的 pb2 存根
 │   ├── server.py               # InferenceServer
 │   ├── client.py               # InferenceClient（打包 → 传输 → 接收）
+│   ├── tls.py                   # gRPC TLS 安全认证（证书管理 + 双向 mTLS）
 │   └── kv_transfer.py          # KV 缓存分块流式传输
 ├── network/
 │   ├── dht.py                  # AstraDHT（hivemind 兼容节点发现）
@@ -348,7 +349,7 @@ scripts/
 ├── run_node.py                 # 生产节点启动 CLI
 ├── run_cluster.py              # 单机多节点集群启动器（Phase 3 基础设施验证）
 └── check_env.py                # 环境依赖检查工具（含节点角色资格输出）
-tests/                          # 239 个 pytest 测试（全部通过）
+tests/                          # 259 个 pytest 测试（全部通过）
 .github/workflows/ci.yml        # CI：Python 3.10/3.11/3.12 矩阵 + lint
 docs/
 ├── ARCHITECTURE.md             # 详细系统设计与传输格式规范
@@ -382,7 +383,7 @@ docs/
 |-----|-----|
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 系统设计、数据流、传输格式规范 |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | 分阶段实施计划 |
-| [docs/TESTING.md](docs/TESTING.md) | 测试方案：已覆盖 239 项 + 待完成测试清单（含不可自动化的硬件测试项） |
+| [docs/TESTING.md](docs/TESTING.md) | 测试方案：已覆盖 259 项 + 待完成测试清单（含不可自动化的硬件测试项） |
 | [docs/SECURITY.md](docs/SECURITY.md) | 节点间加密（mTLS）、隐藏状态隐私保护、输出完整性验证、差分隐私 |
 | [docs/TEE.md](docs/TEE.md) | TEE 部署指南：Intel SGX（Gramine）与 AMD SEV-SNP 远程证明流程 |
 | [docs/FEASIBILITY.md](docs/FEASIBILITY.md) | 算力门槛、地理微集群划分规则、带宽需求、与同类项目对比 |
@@ -409,7 +410,9 @@ docs/
 
 本项目参考并借鉴了 [Petals](https://github.com/bigscience-workshop/petals)（Apache 2.0）与 [KTransformers](https://github.com/kvcache-ai/ktransformers)（Apache 2.0）的设计思路。所有修改内容均在 [NOTICE](NOTICE) 文件及各源文件头部予以说明。
 
-专利条款：Apache 2.0 协议内置专利反击条款，保护所有贡献异构算子及 P2P 协议的开发者。
+## 专利保护
+
+本项目采用 **Apache License 2.0** 协议。任何对本项目或其贡献者发起专利诉讼的实体，将自动丧失本协议授予的所有专利权利。完整条款见 [LICENSE](LICENSE)。
 
 ---
 

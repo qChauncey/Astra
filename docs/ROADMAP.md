@@ -92,7 +92,7 @@ python mock_pipeline.py --phase 2 --seq-len 16 --hidden-dim 256
 
 | Task | Status | Notes |
 |------|--------|-------|
-| gRPC TLS + mutual certificate auth | Pending | Replace `insecure_channel` |
+| gRPC TLS + mutual certificate auth | → Phase 5 | `astra/rpc/tls.py` implemented in Phase 5 |
 | Peer identity via libp2p-style key pairs | Pending | DHT node authentication |
 | Weight shard integrity (SHA-256 manifest) | Pending | Prevent weight tampering |
 
@@ -160,7 +160,7 @@ python mock_pipeline.py --phase 2 --seq-len 16 --hidden-dim 256
 | Generate per-node TLS certificates (X.509 self-signed) | In Progress | `astra/rpc/` |
 | Exchange `secure_channel` with mutual TLS credentials | In Progress | `astra/rpc/server.py`, `client.py` |
 | Certificate pinning / TOFU trust model for P2P bootstrap | Pending | `astra/network/` |
-| gRPC TLS integration tests (encrypted RPC round-trip) | Pending | `tests/` |
+| gRPC TLS integration tests (encrypted RPC round-trip) | ✅ Done | `tests/test_tls.py` |
 
 ### 5.2 hivemind Multi-Machine DHT
 
@@ -212,7 +212,7 @@ python mock_pipeline.py --phase 2 --seq-len 16 --hidden-dim 256
 
 | 层级 | 工具 | 当前状态 | 覆盖目标 |
 |-----|------|---------|---------|
-| 单元测试（CPU） | pytest | ✅ 239 个，全通过 | 序列化、LRU 缓存、Haversine、DHT、gRPC、HeterogeneousEngine、KVTransfer、OpenAI API |
+| 单元测试（CPU） | pytest | ✅ 259 个，全通过 | 序列化、LRU 缓存、Haversine、DHT、gRPC TLS、HeterogeneousEngine、KVTransfer、OpenAI API |
 | 集成测试（本地） | pytest + threading | ✅ 已覆盖 | mock_pipeline.py Phase 1 & 2 |
 | 硬件集成测试 | 自托管 GPU Runner | ❌ 未配置 | KTransformers C++ 内核、真实权重数值对齐 |
 | 负载测试 | locust / 自定义 | ❌ 未实现 | 100 并发请求，吞吐量与 P99 延迟 |
