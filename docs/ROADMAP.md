@@ -176,8 +176,8 @@ python mock_pipeline.py --phase 2 --seq-len 16 --hidden-dim 256
 
 | Task | Status | Notes |
 |------|--------|-------|
-| TLS deployment guide | Pending | Certificate generation + distribution |
-| hivemind DHT configuration guide | Pending | Bootstrap peer setup, NAT traversal |
+| TLS deployment guide | ✅ Done | `docs/TLS.md` — Certificate generation + distribution |
+| hivemind DHT configuration guide | ✅ Done | `docs/HIVEMIND.md` — Bootstrap peer setup, NAT traversal |
 
 ---
 
@@ -212,7 +212,7 @@ python mock_pipeline.py --phase 2 --seq-len 16 --hidden-dim 256
 
 | 层级 | 工具 | 当前状态 | 覆盖目标 |
 |-----|------|---------|---------|
-| 单元测试（CPU） | pytest | ✅ 259 个，全通过 | 序列化、LRU 缓存、Haversine、DHT、gRPC TLS、HeterogeneousEngine、KVTransfer、OpenAI API |
+| 单元测试（CPU） | pytest | ✅ 274 个，全通过 | 序列化、LRU 缓存、Haversine、DHT、gRPC TLS、HeterogeneousEngine、KVTransfer、OpenAI API |
 | 集成测试（本地） | pytest + threading | ✅ 已覆盖 | mock_pipeline.py Phase 1 & 2 |
 | 硬件集成测试 | 自托管 GPU Runner | ❌ 未配置 | KTransformers C++ 内核、真实权重数值对齐 |
 | 负载测试 | locust / 自定义 | ❌ 未实现 | 100 并发请求，吞吐量与 P99 延迟 |
