@@ -58,7 +58,6 @@ from __future__ import annotations
 import hashlib
 import os
 import platform
-import subprocess
 import time
 from dataclasses import dataclass
 from typing import Optional

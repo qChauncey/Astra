@@ -55,14 +55,13 @@ Usage::
 from __future__ import annotations
 
 import hashlib
-import json
 import os
 import platform
 import subprocess
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Optional
 import logging
 
 from . import (
