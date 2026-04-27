@@ -7,7 +7,7 @@
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org)
-[![Tests](https://img.shields.io/badge/tests-299%20passed-brightgreen)]()
+[![Tests](https://img.shields.io/badge/tests-322%20passed-brightgreen)]()
 [![CI](https://github.com/qchauncey/astra/actions/workflows/ci.yml/badge.svg)](.github/workflows/ci.yml)
 [![Status](https://img.shields.io/badge/状态-Phase%204--6%20已完成%2C%20Phase%205%20进行中-blue)]()
 
@@ -415,7 +415,7 @@ docs/
 |-----|-----|
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 系统设计、数据流、传输格式规范 |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | 分阶段实施计划 |
-| [docs/TESTING.md](docs/TESTING.md) | 测试方案：已覆盖 299 项 + 待完成测试清单（含不可自动化的硬件测试项） |
+| [docs/TESTING.md](docs/TESTING.md) | 测试方案：已覆盖 322 项 + 待完成测试清单（含不可自动化的硬件测试项） |
 | [docs/SECURITY.md](docs/SECURITY.md) | 节点间加密（mTLS）、隐藏状态隐私保护、输出完整性验证、差分隐私 |
 | [docs/TEE.md](docs/TEE.md) | TEE 部署指南：Intel SGX（Gramine）与 AMD SEV-SNP 远程证明流程 |
 | [docs/FEASIBILITY.md](docs/FEASIBILITY.md) | 算力门槛、地理微集群划分规则、带宽需求、与同类项目对比 |
