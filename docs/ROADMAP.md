@@ -181,15 +181,17 @@ python mock_pipeline.py --phase 2 --seq-len 16 --hidden-dim 256
 
 ---
 
-## Phase 6 — Frontend Portal (PLANNED)
+## Phase 6 — Frontend Portal (COMPLETE ✓)
 
 **Goal:** Build a user-facing web portal with decentralized login and real-time monitoring.
 
-| Task | Status | Notes |
-|------|--------|-------|
-| Next.js / Electron UI scaffold | 📋 Planned | Decentralized login |
-| Real-time compute / VRAM / RTT monitoring dashboard | 📋 Planned | Pulls stats from Ping RPCs |
-| Contributor earnings / token accounting | 📋 Planned | For optional incentive layer |
+| Task | Status | Module |
+|------|--------|--------|
+| SPA dashboard (Chat, Monitor, Identity, Earnings) | ✓ Done | `astra/api/static/index.html` |
+| Real-time compute / VRAM / RTT monitoring (`/api/monitor`) | ✓ Done | `astra/api/openai_compat.py` — live Ping aggregation |
+| Decentralized challenge-response login (`/api/login`) | ✓ Done | `astra/api/openai_compat.py` — HMAC-SHA256 nonce-based |
+| Contributor earnings / token accounting (`/api/earnings`) | ✓ Done | `astra/api/openai_compat.py` — in-process ledger |
+| Phase 6 unit tests (25 items) | ✓ Done | `tests/test_phase6.py` |
 
 ---
 
@@ -212,7 +214,7 @@ python mock_pipeline.py --phase 2 --seq-len 16 --hidden-dim 256
 
 | 层级 | 工具 | 当前状态 | 覆盖目标 |
 |-----|------|---------|---------|
-| 单元测试（CPU） | pytest | ✅ 274 个，全通过 | 序列化、LRU 缓存、Haversine、DHT、gRPC TLS、HeterogeneousEngine、KVTransfer、OpenAI API |
+| 单元测试（CPU） | pytest | ✅ 299 个，全通过 | 序列化、LRU 缓存、Haversine、DHT、gRPC TLS、HeterogeneousEngine、KVTransfer、OpenAI API、Phase 6 dashboard |
 | 集成测试（本地） | pytest + threading | ✅ 已覆盖 | mock_pipeline.py Phase 1 & 2 |
 | 硬件集成测试 | 自托管 GPU Runner | ❌ 未配置 | KTransformers C++ 内核、真实权重数值对齐 |
 | 负载测试 | locust / 自定义 | ❌ 未实现 | 100 并发请求，吞吐量与 P99 延迟 |

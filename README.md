@@ -7,9 +7,9 @@
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org)
-[![Tests](https://img.shields.io/badge/tests-274%20passed-brightgreen)]()
+[![Tests](https://img.shields.io/badge/tests-299%20passed-brightgreen)]()
 [![CI](https://github.com/qchauncey/astra/actions/workflows/ci.yml/badge.svg)](.github/workflows/ci.yml)
-[![Status](https://img.shields.io/badge/status-Phase%204%20complete%2C%20Phase%205%20in%20progress-blue)]()
+[![Status](https://img.shields.io/badge/status-Phase%204--6%20complete%2C%20Phase%205%20in%20progress-blue)]()
 
 **Astra** is an open-source P2P distributed inference framework that runs **DeepSeek-V4-Flash (284B)** across a cluster of commodity PCs (e.g., RTX 5070 Ti, 16 GB VRAM each) by combining:
 
@@ -17,7 +17,7 @@
 - **[KTransformers](https://github.com/kvcache-ai/ktransformers)**-style heterogeneous GPU/CPU compute split
 - **[hivemind](https://github.com/learning-at-home/hivemind)** DHT for peer discovery and key-value storage
 
-> **Alpha.** Phase 1, 2 & 4 (local + dual-node gRPC pipeline + DP/TEE security hardening) are complete and tested. Phase 3 (full P2P network + API gateway) is in progress. Phase 5 (gRPC TLS + hivemind multi-machine DHT) enters implementation.
+> **Alpha.** Phase 1, 2, 4 & 6 (local + dual-node gRPC pipeline + DP/TEE security hardening + frontend portal) are complete and tested. Phase 3 (full P2P network + API gateway) is in progress. Phase 5 (gRPC TLS + hivemind multi-machine DHT) enters implementation.
 
 ---
 
@@ -324,14 +324,16 @@ astra/
 │   ├── dht.py                  # AstraDHT — hivemind drop-in peer discovery
 │   └── orchestrator.py         # PipelineOrchestrator — N-node DHT chaining
 └── api/
-    └── openai_compat.py        # OpenAI-compatible FastAPI endpoint
+    ├── openai_compat.py        # OpenAI-compatible FastAPI endpoint
+    └── static/
+        └── index.html           # Phase 6 SPA dashboard (Chat, Monitor, Login, Earnings)
 
 mock_pipeline.py                # Phase 1 & 2 local simulation harness
 scripts/
 ├── run_node.py                 # Production node launch CLI
 ├── run_cluster.py              # Single-machine multi-node cluster launcher (Phase 3 validation)
 └── check_env.py                # Environment readiness checker (prints node role eligibility)
-tests/                          # 274 pytest tests (all passing)
+tests/                          # 299 pytest tests (all passing)
 .github/workflows/ci.yml        # CI: Python 3.10/3.11/3.12 matrix + lint
 docs/
 ├── ARCHITECTURE.md             # Detailed design & wire format spec
@@ -365,7 +367,7 @@ docs/
 |-----|----------|
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | System design, data flow, wire format spec |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | Phase-by-phase plan (Phase 1 ✓ · Phase 2 ✓ · Phase 3 in progress) |
-| [docs/TESTING.md](docs/TESTING.md) | Test strategy: 274 tests covered + pending hardware test checklist |
+| [docs/TESTING.md](docs/TESTING.md) | Test strategy: 299 tests covered + pending hardware test checklist |
 | [docs/SECURITY.md](docs/SECURITY.md) | mTLS encryption, differential privacy, output tamper-proofing |
 | [docs/TEE.md](docs/TEE.md) | TEE deployment guide: Intel SGX (Gramine) & AMD SEV-SNP attestation flow |
 | [docs/FEASIBILITY.md](docs/FEASIBILITY.md) | Compute thresholds, geo micro-cluster tiers, bandwidth analysis |
@@ -382,7 +384,7 @@ docs/
 | **Phase 3** | AstraDHT peer discovery, N-node orchestration, OpenAI API, KV-cache streaming | 🔄 In Progress |
 | **Phase 4** | Differential privacy (ε/δ budget, per-layer noise), TEE (Intel SGX + AMD SEV-SNP) | ✅ Complete |
 | **Phase 5** | gRPC TLS mutual auth + hivemind multi-machine DHT integration | 🔄 In Progress |
-| **Phase 6** | Next.js / Electron frontend portal, decentralized login, compute monitoring | 📋 Planned |
+| **Phase 6** | SPA dashboard (Chat, Monitor, Identity, Earnings), decentralized challenge-response login, real-time monitoring, contributor token accounting | ✅ Complete |
 
 ## Core Innovations
 

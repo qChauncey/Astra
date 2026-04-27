@@ -240,6 +240,7 @@ class HeterogeneousEngine:
         self._kt = KTransformersStub()
         self._backend = _kt_backend
         self._dp_injector = dp_injector  # Phase 4: DP noise injection
+        self._last_compute_ms: float = 0.0
 
         # Mock weight matrices (production: load from checkpoint)
         self._attn_q_proj: Dict[int, np.ndarray] = {}
@@ -411,9 +412,9 @@ class HeterogeneousEngine:
                 if self._dp_injector is not None:
                     hidden = self._dp_injector(hidden, layer_idx)
 
-        elapsed_ms = (time.perf_counter() - t0) * 1000.0
+        self._last_compute_ms = (time.perf_counter() - t0) * 1000.0
 
-        metadata = {**packet.metadata, "compute_ms": f"{elapsed_ms:.2f}"}
+        metadata = {**packet.metadata, "compute_ms": f"{self._last_compute_ms:.2f}"}
         if self._dp_injector is not None:
             metadata["dp"] = self._dp_injector.stats()
 
@@ -449,7 +450,15 @@ class HeterogeneousEngine:
             },
             "kv_cache_layers": len(self._kv_cache),
             "expert_cache": self._expert_cache.stats(),
+            "gpu_util": 0.0,
+            "cpu_util": 0.0,
         }
+        # Simulate utilization based on recent forward-pass compute time
+        # (production backend would read real GPU/CPU counters)
+        if self._dmap.attention_on_gpu and self._last_compute_ms > 0:
+            result["gpu_util"] = min(0.95, self._last_compute_ms / 500.0)
+        if self._dmap.moe_on_cpu and self._last_compute_ms > 0:
+            result["cpu_util"] = min(0.90, self._last_compute_ms / 800.0)
         if self._dp_injector is not None:
             result["dp"] = self._dp_injector.stats()
         return result

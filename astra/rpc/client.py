@@ -210,6 +210,8 @@ class InferenceClient:
                 "layer_end": resp.layer_end,
                 "expert_shards": list(resp.expert_shards[:10]),  # truncate for display
                 "backend": resp.backend,
+                "gpu_util": resp.gpu_util,
+                "cpu_util": resp.cpu_util,
             }
         except grpc.RpcError as err:
             return {"error": str(err), "ready": False}
