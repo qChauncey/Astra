@@ -68,6 +68,106 @@ STATIC_DIR = pathlib.Path(__file__).parent / "static"
 
 
 # ─────────────────────────────────────────────────────────────────────────── #
+# Device detection helpers (Phase 8)                                             #
+# ─────────────────────────────────────────────────────────────────────────── #
+
+def _detect_cpu_brand() -> str:
+    """Return the CPU brand string or 'unknown'."""
+    import platform
+    try:
+        import subprocess, sys
+        if sys.platform == "win32":
+            out = subprocess.check_output(
+                ["wmic", "cpu", "get", "name"], text=True, timeout=5
+            )
+            lines = [l.strip() for l in out.splitlines() if l.strip()]
+            return lines[-1] if len(lines) > 1 else platform.processor() or "unknown"
+        elif sys.platform == "darwin":
+            out = subprocess.check_output(
+                ["sysctl", "-n", "machdep.cpu.brand_string"], text=True, timeout=5
+            )
+            return out.strip() or "unknown"
+        else:  # Linux
+            try:
+                with open("/proc/cpuinfo") as f:
+                    for line in f:
+                        if line.startswith("model name"):
+                            return line.split(":", 1)[1].strip()
+            except Exception:
+                pass
+            return platform.processor() or "unknown"
+    except Exception:
+        return platform.processor() or "unknown"
+
+
+def _detect_gpu_brand() -> str:
+    """Return the GPU brand string or 'none / not detected'."""
+    try:
+        import subprocess, sys
+        if sys.platform == "win32":
+            out = subprocess.check_output(
+                ["wmic", "path", "win32_VideoController", "get", "name"],
+                text=True, timeout=5,
+            )
+            lines = [l.strip() for l in out.splitlines() if l.strip()]
+            return lines[-1] if len(lines) > 1 else "none / not detected"
+        else:
+            try:
+                out = subprocess.check_output(
+                    ["lspci"], text=True, timeout=5
+                )
+                for line in out.splitlines():
+                    if "VGA" in line or "3D" in line or "Display" in line:
+                        return line.strip()
+            except Exception:
+                pass
+            return "none / not detected"
+    except Exception:
+        return "none / not detected"
+
+
+def _detect_ram_total() -> str:
+    """Return total RAM in human-readable format."""
+    import platform
+    try:
+        import psutil
+        total = psutil.virtual_memory().total
+        if total >= 1 << 30:
+            return f"{total / (1 << 30):.1f} GB"
+        return f"{total / (1 << 20):.0f} MB"
+    except ImportError:
+        pass
+    try:
+        import subprocess, sys, re
+        if sys.platform == "win32":
+            out = subprocess.check_output(
+                ["wmic", "computersystem", "get", "totalphysicalmemory"],
+                text=True, timeout=5,
+            )
+            m = re.search(r"(\d+)", out)
+            if m:
+                gb = int(m.group(1)) / (1024 ** 3)
+                return f"{gb:.1f} GB"
+        elif sys.platform == "darwin":
+            out = subprocess.check_output(
+                ["sysctl", "-n", "hw.memsize"], text=True, timeout=5
+            )
+            gb = int(out.strip()) / (1024 ** 3)
+            return f"{gb:.1f} GB"
+        else:
+            with open("/proc/meminfo") as f:
+                for line in f:
+                    if line.startswith("MemTotal"):
+                        kb = int(re.search(r"(\d+)", line).group(1))
+                        gb = kb / (1024 * 1024)
+                        return f"{gb:.1f} GB"
+    except Exception:
+        pass
+    return f"{platform.system()} default"
+
+
+# ─────────────────────────────────────────────────────────────────────────── #
+# ─────────────────────────────────────────────────────────────────────────── #
 # OpenAI schema models                                                          #
 # ─────────────────────────────────────────────────────────────────────────── #
 
@@ -278,6 +378,17 @@ def create_app(
         request_id = f"chatcmpl-{uuid.uuid4().hex[:12]}"
         created_ts = int(time.time())
 
+        # Update token speed (Phase 8)
+        now = time.time()
+        if _token_speed_state["last_measurement_ts"] > 0:
+            elapsed = now - _token_speed_state["last_measurement_ts"]
+            if elapsed > 0.01:
+                _token_speed_state["tokens_per_second"] = completion_tokens / elapsed
+        else:
+            _token_speed_state["tokens_per_second"] = float(completion_tokens)
+        _token_speed_state["last_measurement_ts"] = now
+        _token_speed_state["total_tokens_generated"] += completion_tokens
+
         if req.stream:
             return StreamingResponse(
                 _stream_response(request_id, req.model, completion_text, created_ts),
@@ -312,6 +423,80 @@ def create_app(
     async def health(raw: Request):
         peers = raw.app.state.dht.get_all_peers()
         return {"status": "ok", "peers": len(peers)}
+
+    # ------------------------------------------------------------------ #
+    # Phase 8: Model info, device info, token speed, mode switching         #
+    # ------------------------------------------------------------------ #
+
+    # Cached model metadata (production: read from model config / runtime)
+    _model_meta = {
+        "name": "MiniMax-M2.5",
+        "version": "M2.5-Chat-0.1.0",
+        "architecture": "MoE + MLA (GQA)",
+        "parameter_count": "126B",
+        "num_layers": 62,
+        "num_experts": 256,
+        "num_active_experts": 8,
+        "vocab_size": 200000,
+        "hidden_dim": 4096,
+        "status": "stub (numpy random, no GPU)",
+        "supported_modes": ["offline", "p2p"],
+    }
+
+    # Token speed measurement (updated by the chat endpoint)
+    _token_speed_state: Dict[str, Union[float, int]] = {
+        "tokens_per_second": 0.0,
+        "last_measurement_ts": 0,
+        "total_tokens_generated": 0,
+    }
+
+    @app.get("/api/model-info")
+    async def model_info(_raw: Request):
+        """Return model metadata (name, version, architecture, parameter count)."""
+        return dict(_model_meta)
+
+    @app.get("/api/device-info")
+    async def device_info(_raw: Request):
+        """Return current device / hardware information."""
+        import platform
+        info: Dict[str, str] = {
+            "hostname": platform.node(),
+            "os": f"{platform.system()} {platform.release()}",
+            "python_version": platform.python_version(),
+            "cpu": _detect_cpu_brand(),
+            "gpu": _detect_gpu_brand(),
+            "ram_total": _detect_ram_total(),
+        }
+        return info
+
+    @app.get("/api/token-speed")
+    async def token_speed(_raw: Request):
+        """Return current token generation speed (tok/s)."""
+        return {
+            "tokens_per_second": round(_token_speed_state["tokens_per_second"], 2),
+            "total_tokens_generated": _token_speed_state["total_tokens_generated"],
+            "ts": int(time.time()),
+        }
+
+    @app.get("/api/mode")
+    async def get_mode(raw: Request):
+        """Return current operating mode."""
+        return {"mode": raw.app.state.mode, "available": ["offline", "p2p"]}
+
+    @app.post("/api/mode")
+    async def set_mode(raw: Request):
+        """Switch operating mode (offline or p2p)."""
+        import json as _json
+        body = await raw.body()
+        payload = _json.loads(body)
+        new_mode = payload.get("mode", "").strip()
+        if new_mode not in ("offline", "p2p"):
+            return JSONResponse(
+                content={"error": "mode must be 'offline' or 'p2p'"},
+                status_code=400,
+            )
+        raw.app.state.mode = new_mode
+        return {"mode": new_mode}
 
     # ------------------------------------------------------------------ #
     # Phase 6: Monitor — live Ping aggregation                              #
