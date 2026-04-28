@@ -55,7 +55,6 @@ import numpy as np
 from ..serialization.tensor_pack import TensorPacket
 from ..config.model_config import (
     get_model_config,
-    ModelConfig,
     AttentionType,
 )
 from .differential_privacy import LayerDPInjector
@@ -498,6 +497,10 @@ class DeviceMap:
     gpu_device: str = "cuda:0"   # ignored in stub mode
     model_id: Optional[str] = None
 
+    # Overrides for testing / mock pipeline with custom dimensions
+    _hidden_dim_override: Optional[int] = None
+    _intermediate_dim_override: Optional[int] = None
+
     # Attention head configuration (resolved from model config)
     num_heads: Optional[int] = None
     num_kv_heads: Optional[int] = None
@@ -534,9 +537,18 @@ class DeviceMap:
 
     @property
     def hidden_dim(self) -> int:
+        if self._hidden_dim_override is not None:
+            return self._hidden_dim_override
         if self._cfg is None:
             return 128  # test default
         return self._cfg.hidden_dim  # type: ignore[attr-defined]
+
+    @property
+    def intermediate_dim(self) -> int:
+        if self._intermediate_dim_override is not None:
+            return self._intermediate_dim_override
+        # DeepSeek-V4: MoE intermediate = hidden_dim // 4
+        return self.hidden_dim // 4
 
     @property
     def attention_type(self) -> AttentionType:

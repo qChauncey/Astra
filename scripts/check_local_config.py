@@ -17,13 +17,13 @@ print(f"model_type: {d.get('model_type')}")
 print(f"num_hidden_layers: {d.get('num_hidden_layers')}")
 
 # MoE specific
-print(f"\n=== MoE Params ===")
+print("\n=== MoE Params ===")
 for k in sorted(d.keys()):
     if any(term in k.lower() for term in ['expert', 'moe', 'n_routed', 'n_shared', 'num_expert']):
         print(f"  {k}: {d[k]}")
 
 # Key dims
-print(f"\n=== Key Dims ===")
+print("\n=== Key Dims ===")
 for k in ['hidden_size', 'intermediate_size', 'num_attention_heads',
            'num_key_value_heads', 'vocab_size', 'max_position_embeddings',
            'torch_dtype', 'quantization_config']:

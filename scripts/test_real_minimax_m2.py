@@ -25,19 +25,19 @@ import numpy as np
 _project_root = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_project_root))
 
-from astra.inference.weight_loader import (
+from astra.inference.weight_loader import (  # noqa: E402
     WeightLoader,
     MmapWeightStore,
     ModelIndex,
     detect_attention_format,
     AttentionFormat,
 )
-from astra.inference.heterogeneous import (
+from astra.inference.heterogeneous import (  # noqa: E402
     HeterogeneousEngine,
     DeviceMap,
 )
-from astra.serialization.tensor_pack import TensorPacket
-from astra.config.model_config import get_model_config
+from astra.serialization.tensor_pack import TensorPacket  # noqa: E402
+from astra.config.model_config import get_model_config  # noqa: E402
 
 MODEL_DIR = pathlib.Path("/home/chauncey/minimax-m2.5")
 MODEL_ID = "minimax-m2.5"
@@ -154,7 +154,6 @@ check(f"Loaded {n_expert_loaded} expert weight sets in {dt_experts:.2f}s",
       n_expert_loaded == expected_experts)
 
 # Inspect first expert (try both possible storage attributes)
-from astra.inference.shared_expert_cache import ExpertWeights
 
 ew = None
 if hasattr(engine, '_expert_cache'):
@@ -216,7 +215,7 @@ check(f"No NaN in output (NaN count = {nan_count})", not has_nan)
 output_rms = float(np.sqrt(np.mean(output.astype(np.float64)**2)))
 check(f"Output RMS = {output_rms:.4f} (expect > 0)", output_rms > 0.0)
 
-print(f"\n  [i] Per-token output sample (first 3 tokens, first 6 dims):")
+print("\n  [i] Per-token output sample (first 3 tokens, first 6 dims):")
 for t in range(min(3, output.shape[0])):
     vals = output[t, :6]
     print(f"      token[{t}]: [{', '.join(f'{x:.4f}' for x in vals)}]")

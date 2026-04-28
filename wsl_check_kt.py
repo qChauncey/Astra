@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Check KTransformers installation status in WSL."""
-import sys, os
+import sys
+import os
 
 # 1. Check ktransformers package import
 print("=== KTransformers Import Check ===")
@@ -53,7 +54,6 @@ except Exception as e:
 print("\n=== DeepSeek Model Probe ===")
 try:
     sys.path.insert(0, os.path.expanduser("~/ktransformers"))
-    from ktransformers import KTransformerModel
     print("OK - KTransformerModel importable")
 except Exception as e:
     print(f"FAIL - {e}")

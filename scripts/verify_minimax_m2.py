@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Verify MiniMax-M2.5 model shard integrity via WeightLoader.ModelIndex."""
-import pathlib, sys
+import pathlib
+import sys
 
 # Add astra project root to path (run from WSL with cwd = project root)
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
@@ -39,7 +40,7 @@ def main():
 
     # 5. Key naming analysis
     keys = sorted(idx._tensor_to_shard.keys())
-    print(f"\nKey prefixes (first segment):")
+    print("\nKey prefixes (first segment):")
     prefixes = {}
     for k in keys:
         p = k.split(".")[0]
@@ -48,7 +49,7 @@ def main():
         print(f"  {p}: {n}")
 
     # 6. Sample full keys
-    print(f"\nSample tensor keys (first 20):")
+    print("\nSample tensor keys (first 20):")
     for k in keys[:20]:
         print(f"  {k}")
 

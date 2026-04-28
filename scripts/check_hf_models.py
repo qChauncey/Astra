@@ -1,17 +1,13 @@
 #!/usr/bin/env python3
 """Query HuggingFace API for DeepSeek V4 / V4 Pro model info."""
-import subprocess
-import json
 import sys
 
 def main():
     try:
-        import huggingface_hub
+        from huggingface_hub import list_models
     except ImportError:
         print("ERROR: huggingface_hub not installed. Run: pip install huggingface_hub")
         sys.exit(1)
-
-    from huggingface_hub import list_models
 
     searches = ["deepseek-v4", "DeepSeek-V4", "deepseek-v4-pro", "DeepSeek-V4-Pro"]
 

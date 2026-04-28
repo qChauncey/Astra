@@ -31,7 +31,6 @@ import numpy as np
 import pytest
 
 from astra.inference.heterogeneous import HeterogeneousEngine, MLAWeights, DeviceMap
-from astra.inference.shared_expert_cache import ExpertWeights
 from astra.inference.weight_loader import (
     MLA_TENSOR_MAP,
     MmapWeightStore,
@@ -397,7 +396,6 @@ class TestMmapWeightStore:
 class TestSafetensorsMmapReader:
     def test_open_and_read(self, mla_checkpoint: Path):
         reader = SafetensorsMmapReader(max_open_shards=2)
-        shard_path = mla_checkpoint / "model-00001-of-00001.safetensors"
         t = reader.get_tensor(
             str(mla_checkpoint),
             "model-00001-of-00001.safetensors",

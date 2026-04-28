@@ -28,7 +28,7 @@ total_expert_params = expert_params_per_layer * num_layers
 non_expert_params = total_params_b * 1e9 - total_expert_params
 non_expert_gb = non_expert_params * 2 / 1e9  # BF16 = 2 bytes
 
-print(f"\n--- DeepSeek-V3.2 Architecture ---")
+print("\n--- DeepSeek-V3.2 Architecture ---")
 print(f"Total params:       {total_params_b}B")
 print(f"Expert params:      {total_expert_params/1e9:.1f}B")
 print(f"Non-expert params:  {non_expert_params/1e9:.1f}B")
@@ -39,7 +39,7 @@ disk_gb = 340  # FP8 download
 disk_free = 295  # available
 ram_free = 14   # available
 
-print(f"\n--- System Resources ---")
+print("\n--- System Resources ---")
 print(f"Disk free:          {disk_free} GB")
 print(f"Disk needed (V3.2): {disk_gb} GB  => {'OK' if disk_free > disk_gb else 'FAIL: not enough space'}")
 print(f"RAM free:           {ram_free} GB")
@@ -49,18 +49,18 @@ print(f"VRAM free:          {vram} GB")
 # KTransformers default: kt-method=FP8, attention-backend=flashinfer
 # With CPU offload, GPU only runs attention kernel + small expert cache
 # Default kt-num-gpu-experts=1 means 1 expert layer stays in VRAM (rest CPU)
-print(f"\n--- KTransformers V3.2 Default Configuration ---")
-print(f"kt-method:          FP8 (CPU quantized)")
-print(f"attention-backend:  flashinfer (GPU)")
+print("\n--- KTransformers V3.2 Default Configuration ---")
+print("kt-method:          FP8 (CPU quantized)")
+print("attention-backend:  flashinfer (GPU)")
 print(f"kt-num-gpu-experts: {gpu_experts} (auto-computed)")
-print(f"kt-gpu-prefill-token-threshold: 4096")
+print("kt-gpu-prefill-token-threshold: 4096")
 
 # Expert per-layer VRAM: gate+up+down = 3 * hd * expert_intermediate * 2 bytes
 expert_layer_gb = 3 * hd * expert_intermediate * 2 / 1e9
 vram_for_kv = 2  # KV cache
 vram_for_attention = 1  # attention buffers
 vram_needed = expert_layer_gb + vram_for_kv + vram_for_attention
-print(f"\n--- VRAM Breakdown (per layer, BF16) ---")
+print("\n--- VRAM Breakdown (per layer, BF16) ---")
 print(f"Expert weights:     {expert_layer_gb:.2f} GB")
 print(f"KV cache buffer:    ~{vram_for_kv} GB")
 print(f"Attention kernels:  ~{vram_for_attention} GB")
@@ -68,7 +68,7 @@ print(f"Total needed:       ~{vram_needed:.1f} GB")
 print(f"VRAM available:     {vram} GB")
 print(f"VRAM status:        {'OK' if vram > vram_needed else 'TIGHT - may OOM'}")
 
-print(f"\n===== FINAL VERDICT =====")
+print("\n===== FINAL VERDICT =====")
 if disk_free <= disk_gb:
     print("BLOCKED: Not enough disk space for V3.2 (need ~340GB, have {disk_free}GB)")
     print("RECOMMEND: Use MiniMax-M2.5 (78GB, already downloaded) instead")

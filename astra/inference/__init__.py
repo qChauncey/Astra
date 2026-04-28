@@ -23,6 +23,7 @@ from .batch_utils import BatchInfo, pad_sequences, unpad_output, compute_batch_m
 
 __all__ = [
     "HeterogeneousEngine", "DeviceMap", "KTransformersAdapter",
+    "MmapWeightStore", "SafetensorsMmapReader",
     "detect_ktransformers", "SharedExpertCache",
     "MLAWeights", "GQAWeights",
     "AstraTokenizer", "load_tokenizer", "get_tokenizer",
