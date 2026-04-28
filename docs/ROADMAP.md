@@ -1,6 +1,6 @@
 # Astra — Implementation Roadmap
 
-> Version 0.1 · April 2025 · Apache License 2.0
+> Version 0.2 · April 2026 · Apache License 2.0
 
 ---
 
@@ -177,7 +177,7 @@ authentication, weight integrity, and storage/compute role separation.
 | Generate per-node TLS certificates (X.509 self-signed) | ✓ Done | `astra/rpc/tls.py` |
 | Exchange `secure_channel` with mutual TLS credentials | ✓ Done | `astra/rpc/server.py`, `client.py` |
 | Certificate pinning / TOFU trust model for P2P bootstrap | ✓ Done | `astra/rpc/tls.py` — `TofuTrustStore` with serialization |
-| gRPC TLS integration tests (encrypted RPC round-trip) | ✓ Done | `tests/test_tls.py` (19 items) |
+| gRPC TLS integration tests (encrypted RPC round-trip) | ✓ Done | `tests/test_tls.py` (20 items) |
 
 ### 5.2 hivemind Multi-Machine DHT
 
@@ -187,7 +187,7 @@ authentication, weight integrity, and storage/compute role separation.
 | Multi-machine DHT bootstrap (initial peer rendezvous) | ✓ Done | `HivemindDHT.__init__` accepts `initial_peers` multiaddr list |
 | Cross-machine expert shard advertisement via DHT | ✓ Done | `HivemindDHT.announce()` publishes `expert_shards` |
 | DHT-based KV cache location lookup | ✓ Done | `HivemindDHT.store()` / `fetch()` generic KV API |
-| hivemind DHT integration tests (multi-node discovery) | ✓ Done | `tests/test_hivemind_bridge.py` (21 items) |
+| hivemind DHT integration tests (multi-node discovery) | ✓ Done | `tests/test_hivemind_bridge.py` (16 items, 15 passed + 1 skipped) |
 
 ### 5.3 Documentation
 
@@ -329,7 +329,7 @@ batching, speculative decoding, expert replication).
 
 | Layer | Tool | Current Status | Coverage Target |
 |-----|------|---------|---------|
-| Unit (CPU) | pytest | ✅ 498 passed + 1 skipped | Serialization, LRU cache, Haversine + real RTT, DHT, Engram, Peer Identity, Weight Manifest, gRPC TLS, HeterogeneousEngine, Tokenizer, KVTransfer, OpenAI API, Phase 6 dashboard, Continuous Batching, Speculative Decoding, Expert Replication, Weight Loader, Tokenizer, Weight Manifest |
+| Unit (CPU) | pytest | ✅ 498 passed + 1 skipped | Serialization, LRU cache, Haversine + real RTT, DHT, Engram, Peer Identity, Weight Manifest, gRPC TLS, HeterogeneousEngine, Tokenizer, KVTransfer, OpenAI API, Phase 6 dashboard, Continuous Batching, Speculative Decoding, Expert Replication, Weight Loader |
 | Integration (local) | pytest + threading | ✅ Covered | mock_pipeline.py Phase 1 & 2 |
 | Hardware Integration | Self-hosted GPU Runner | ❌ Not configured | KTransformers C++ kernels, real-weight numerical alignment |
 | Load Test | scripts/load_test.py (asyncio+httpx) | ✅ Implemented | 100 concurrent requests, throughput & P99 latency |
@@ -339,8 +339,8 @@ batching, speculative decoding, expert replication).
 | Test File | Status | Notes |
 |---------|------|-----|
 | `tests/test_heterogeneous.py` | ✅ Done | `HeterogeneousEngine` direct unit tests (23 items) |
-| `tests/test_kv_transfer.py` | ✅ Done | KV-cache chunked transfer & reassembly (20 items) |
-| `tests/test_api.py` | ✅ Done | OpenAI API endpoints (httpx AsyncClient) (23 items) |
+| `tests/test_kv_transfer.py` | ✅ Done | KV-cache chunked transfer & reassembly (15 items) |
+| `tests/test_api.py` | ✅ Done | OpenAI API endpoints (httpx AsyncClient) (22 items) |
 | `.github/workflows/hardware_test.yml` | ✅ Done | Self-hosted GPU Runner CI config — attach runner to activate |
 
 ---
