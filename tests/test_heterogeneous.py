@@ -22,7 +22,6 @@ from astra.inference.heterogeneous import (
     HeterogeneousEngine,
     KTransformersStub,
     LayerKVCache,
-    GQAWeights,
 )
 from astra.inference.shared_expert_cache import ExpertWeights
 from astra.serialization.tensor_pack import TensorPacket

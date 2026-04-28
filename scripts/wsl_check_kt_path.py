@@ -1,5 +1,9 @@
 """Print kt_kernel install path and explore its modules."""
-import kt_kernel
+import os
+import sys
+
+import kt_kernel  # noqa: E402
+
 print("kt_kernel path:", kt_kernel.__path__)
 print("kt_kernel file:", getattr(kt_kernel, "__file__", "N/A"))
 print()
@@ -14,10 +18,8 @@ for mod in ["experts", "experts_base", "utils", "generate_gpu_experts_masks"]:
 print()
 
 # Also try to find experts_base source
-import sys
 for p in sys.path:
     candidate = f"{p}/kt_kernel"
-    import os
     if os.path.isdir(candidate):
         print(f"Found kt_kernel dir: {candidate}")
         for root, dirs, files in os.walk(candidate):

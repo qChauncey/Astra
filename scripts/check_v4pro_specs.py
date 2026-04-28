@@ -23,7 +23,6 @@ def main():
     # Config
     config = data.get('config', {})
     if config:
-        from pprint import pprint
         print("=== CONFIG ===")
         for k in sorted(config):
             v = config[k]

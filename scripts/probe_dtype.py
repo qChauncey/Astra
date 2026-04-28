@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Probe MiniMax-M2.5 FP8 scale_inv shapes."""
-import json, pathlib, struct
+import json
+import pathlib
+import struct
 
 MODEL_DIR = pathlib.Path("/home/chauncey/minimax-m2.5")
 

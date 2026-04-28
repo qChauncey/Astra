@@ -94,7 +94,6 @@ Usage::
 
 from __future__ import annotations
 
-import io
 import json
 import logging
 import mmap
@@ -555,7 +554,6 @@ class WeightLoader:
 
     def _load_mla_attention(self, engine) -> int:
         """Load MLA attention weights (q_a_proj, kv_a_proj, etc.)."""
-        from .heterogeneous import MLAWeights
 
         loaded = 0
         for i in range(self.layer_start, self.layer_end):
@@ -605,7 +603,6 @@ class WeightLoader:
         Uses the engine's native hidden_dim from the model config (e.g. 3072
         for MiniMax-M2.5) rather than legacy DeepSeek-style fitting.
         """
-        from .heterogeneous import GQAWeights
 
         loaded = 0
         for i in range(self.layer_start, self.layer_end):
@@ -939,9 +936,6 @@ class SafetensorsMmapReader:
 
         # Parse header
         header = _parse_safetensors_header(path)
-        # Calculate data offset: 8 bytes header_len + header bytes
-        header_bytes = json.dumps(header).encode("utf-8")
-        data_offset = 8 + len(header_bytes)
 
         # Open + mmap
         fd = os.open(str(path), os.O_RDONLY)
@@ -1036,8 +1030,6 @@ class MmapWeightStore:
         for one-shot access where you do not want to pollute the cache.
         """
         header = _parse_safetensors_header(shard_path)
-        header_bytes = json.dumps(header).encode("utf-8")
-        data_offset = 8 + len(header_bytes)
 
         fd = os.open(str(shard_path), os.O_RDONLY)
         try:

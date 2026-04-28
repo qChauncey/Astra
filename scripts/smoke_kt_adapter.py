@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 """Smoke-test the KTransformersAdapter end-to-end on a real GPU (WSL2)."""
-import os, sys, numpy as np
+import os
+import sys
+import numpy as np
 
 # Ensure we import from the repo root
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))

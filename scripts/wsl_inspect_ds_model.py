@@ -22,7 +22,7 @@ vocab_size = c.get('vocab_size', '?')
 
 # Model fingerprints:
 # DeepSeek-V2: arch=DeepseekV2ForCausalLM, hidden=5120, 160 experts, 60 layers
-# DeepSeek-V3: arch=DeepseekV3ForCausalLM, hidden=7168, 256 experts, 61 layers  
+# DeepSeek-V3: arch=DeepseekV3ForCausalLM, hidden=7168, 256 experts, 61 layers
 # DeepSeek-R1: arch=DeepseekV3ForCausalLM (same base), hidden=7168, 256 experts, 61 layers
 # DeepSeek-V4: arch would be DeepseekV4ForCausalLM (or V3), hidden unknown
 
@@ -48,7 +48,7 @@ elif 'V4' in arch or 'v4' in str(arch).lower():
 else:
     print(f"UNKNOWN architecture: {arch}")
     print(f"Model type: {model_type}")
-    
+
 # Check if this model is in KTransformers registry
 print()
 print("=" * 60)
@@ -57,7 +57,7 @@ print("=" * 60)
 
 # KTransformers supports 6 models:
 # DeepSeek-V3-0324 (V3 architecture)
-# DeepSeek-V3.2 (V3 architecture) 
+# DeepSeek-V3.2 (V3 architecture)
 # DeepSeek-R1-0528 (V3 architecture)
 # Kimi-K2-Thinking (different arch)
 # MiniMax-M2 (different arch)

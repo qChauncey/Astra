@@ -70,9 +70,9 @@ import numpy as np
 # ── Astra imports ──────────────────────────────────────────────────────────
 from astra.inference.differential_privacy import LayerDPInjector
 from astra.inference.heterogeneous import DeviceMap, HeterogeneousEngine
-from astra.inference.shared_expert_cache import ExpertWeights, SharedExpertCache
+from astra.inference.shared_expert_cache import ExpertWeights
 from astra.network.hivemind_bridge import create_dht
-from astra.routing.geo_router import GeoAwareMoERouter, GeoRegion, NodeInfo, REGIONS
+from astra.routing.geo_router import GeoAwareMoERouter
 from astra.rpc.client import InferenceClient
 from astra.rpc.server import InferenceServer
 from astra.rpc.tls import (
@@ -80,7 +80,6 @@ from astra.rpc.tls import (
     generate_self_signed_cert_bundle,
 )
 from astra.serialization.tensor_pack import (
-    DEEPSEEK_V4_HIDDEN_DIM,
     DEEPSEEK_V4_NUM_LAYERS,
     TensorPacket,
     TensorSerializer,
@@ -151,6 +150,8 @@ def _make_server(
 ) -> InferenceServer:
     """Construct an InferenceServer with shared-expert pinning."""
     dmap = DeviceMap.cpu_only()
+    dmap._hidden_dim_override = hidden_dim
+    dmap._intermediate_dim_override = hidden_dim // 4
 
     server = InferenceServer(
         node_id=node_id,
