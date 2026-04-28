@@ -189,7 +189,16 @@ def _detect_backend() -> tuple:
     try:
         import torch
         if torch.cuda.is_available():
-            return "pytorch_cuda", torch
+            # Smoke test: verify the installed PyTorch build actually supports
+            # this GPU's compute capability (e.g., sm_120 Blackwell requires
+            # a newer PyTorch than what cu124 wheels ship).
+            try:
+                t = torch.zeros(1, device="cuda")
+                _ = torch.mean(t)
+            except Exception:
+                pass  # GPU too new for this PyTorch build → fall through
+            else:
+                return "pytorch_cuda", torch
     except ImportError:
         pass
 
