@@ -1,0 +1,104 @@
+# Copyright 2025 Project Astra Contributors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# ── GPU override for docker-compose.yml ───────────────────────────────────────
+#
+# Extends the base docker-compose.yml to run inference nodes on real GPUs.
+#
+# Prerequisites:
+#   - NVIDIA Container Toolkit installed on the host
+#   - Dockerfile.gpu built:  docker build -f Dockerfile.gpu -t astra:gpu .
+#   - DeepSeek-V4 weights mounted at /data/model inside each node
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.gpu.yml up
+#
+# Each inference node (node-a, node-b, node-c) gets one GPU.
+# Adjust `device_ids` to assign specific GPUs (run `nvidia-smi -L` to list).
+# ─────────────────────────────────────────────────────────────────────────────
+
+version: "3.9"
+
+services:
+  node-a:
+    build:
+      context: .
+      dockerfile: Dockerfile.gpu
+    environment:
+      ASTRA_USE_KTRANSFORMERS: "1"
+    command:
+      - python
+      - scripts/run_node.py
+      - --node-id=node-a
+      - --port=50051
+      - --layer-start=0
+      - --layer-end=20
+      - --hidden-dim=7168
+      - --gpu
+      - --geo-region=us-west
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ["0"]
+              capabilities: [gpu]
+
+  node-b:
+    build:
+      context: .
+      dockerfile: Dockerfile.gpu
+    environment:
+      ASTRA_USE_KTRANSFORMERS: "1"
+    command:
+      - python
+      - scripts/run_node.py
+      - --node-id=node-b
+      - --port=50052
+      - --layer-start=21
+      - --layer-end=40
+      - --hidden-dim=7168
+      - --gpu
+      - --geo-region=us-west
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ["1"]
+              capabilities: [gpu]
+
+  node-c:
+    build:
+      context: .
+      dockerfile: Dockerfile.gpu
+    environment:
+      ASTRA_USE_KTRANSFORMERS: "1"
+    command:
+      - python
+      - scripts/run_node.py
+      - --node-id=node-c
+      - --port=50053
+      - --layer-start=41
+      - --layer-end=61
+      - --hidden-dim=7168
+      - --gpu
+      - --geo-region=us-east
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ["2"]
+              capabilities: [gpu]

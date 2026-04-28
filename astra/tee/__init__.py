@@ -200,3 +200,15 @@ def _auto_register_backends() -> None:
 
 
 _auto_register_backends()
+
+# Public API — import these directly from astra.tee
+from .gramine import GramineBackend  # noqa: E402
+from .amd_sev import SevBackend      # noqa: E402
+
+__all__ = [
+    "TEEBackend",
+    "GramineBackend",
+    "SevBackend",
+    "register_backend",
+    "get_tee_backend",
+]

@@ -21,12 +21,14 @@ from .engram import (
     discover_engrams,
     find_blob_holder,
 )
+from .hivemind_bridge import HivemindDHT, create_dht
 from .identity import PeerIdentity, SignedPayload, TrustRegistry, verify_signed_payload
 from .orchestrator import PipelineOrchestrator, PipelineConfig
 from .rtt import PeerRTT, RTTMonitor, grpc_ping_probe, tcp_probe
 
 __all__ = [
     "AstraDHT", "DHTNodeRecord",
+    "HivemindDHT", "create_dht",
     "PipelineOrchestrator", "PipelineConfig",
     "PeerIdentity", "SignedPayload", "TrustRegistry", "verify_signed_payload",
     "RTTMonitor", "PeerRTT", "tcp_probe", "grpc_ping_probe",
