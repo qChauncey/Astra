@@ -6,11 +6,11 @@
 
 ## 1. 当前测试状态（诚实评估）
 
-### 1.1 已通过的自动化测试（400 个，可在 CI 中运行）
+### 1.1 已通过的自动化测试（430 个，可在 CI 中运行）
 
 ```
 python -m pytest tests/ -v
-# 400 passed, 3 skipped in ~10s（纯 CPU / NumPy 环境）
+# 430 passed, 3 skipped in ~10s（纯 CPU / NumPy 环境）
 ```
 
 | 测试文件 | 覆盖范围 | 测试数 |
@@ -29,7 +29,7 @@ python -m pytest tests/ -v
 | `test_tee.py` | TEE 后端初始化、Gramine manifest 生成、SEV attestation、安全信道、密封密钥 | 15 |
 | `test_tls.py` | mTLS 证书生成、TLSConfig 服务端/客户端、双向认证、证书过期/域名不匹配拒绝 | 15 |
 | `test_hivemind_bridge.py` | hivemind DHT 桥接、节点加入/发现、多进程协调、KV 存储 CRUD、层覆盖查询 | 15 |
-| `test_phase6.py` | SPA 静态文件服务、WebSocket 实时监控、仪表盘端点、挑战-应答认证、代币账户 | 15 |
+| `test_phase6.py` | SPA 静态文件服务、挑战-应答认证、代币账户、模型信息、设备信息、Token 速度、模式切换 | 45 |
 | `test_identity.py` | PeerIdentity 密钥对生成、签名/验证、TrustRegistry 信任管理、SignedPayload 往返 | 17 |
 | `test_rtt.py` | RTT 探针、PeerRTT 统计、RTTMonitor 周期采样、超时/失败降级 | 14 |
 | `test_engram.py` | EngramNode 能力声明、InMemoryEngramStore CRUD、DiskEngramStore 持久化、discover_engrams 过滤 | 18 |
@@ -37,9 +37,9 @@ python -m pytest tests/ -v
 | `test_weight_manifest.py` | WeightManifest 创建、哈希计算、保存/加载往返、篡改检测 | 18 |
 | `test_tokenizer.py` | AstraTokenizer 编码/解码、特殊 token、批处理、截断、加载工厂函数 | 23 |
 
-### 1.2 已填补的覆盖空缺（Phase 3–6 完成）
+### 1.2 已填补的覆盖空缺（Phase 3–8 完成）
 
-所有在 Phase 1/2 标记为"待补充"的测试文件现已编写并纳入 CI 流水线。`test_heterogeneous.py`、`test_kv_transfer.py`、`test_api.py`、`test_differential_privacy.py`、`test_tee.py`、`test_tls.py`、`test_hivemind_bridge.py`、`test_phase6.py`、`test_identity.py`、`test_rtt.py`、`test_engram.py`、`test_weight_loader.py`、`test_weight_manifest.py`、`test_tokenizer.py` 直接测试各自模块，共计 400 个测试（Phase 1/2: 168 + Phase 3: 84 + Phase 4: 33 + Phase 5: 30 + Phase 6: 15 + Phase 7: 85）。
+所有在 Phase 1/2 标记为"待补充"的测试文件现已编写并纳入 CI 流水线。`test_heterogeneous.py`、`test_kv_transfer.py`、`test_api.py`、`test_differential_privacy.py`、`test_tee.py`、`test_tls.py`、`test_hivemind_bridge.py`、`test_phase6.py`、`test_identity.py`、`test_rtt.py`、`test_engram.py`、`test_weight_loader.py`、`test_weight_manifest.py`、`test_tokenizer.py` 直接测试各自模块，共计 430 个测试（Phase 1/2: 168 + Phase 3: 84 + Phase 4: 33 + Phase 5: 30 + Phase 6: 25 + Phase 7: 85 + Phase 8: 20）。
 
 #### 剩余覆盖空缺（待补充）
 
@@ -207,15 +207,15 @@ jobs:
 │  Layer 3: 端到端集成（本地双进程 gRPC）          │  ← PR 合并前
 │  mock_pipeline.py Phase 1 & 2 作为 pytest 用例  │
 ├─────────────────────────────────────────────────┤
-│  Layer 2: 组件集成（现有 400 个测试）            │  ← 每次 push
+│  Layer 2: 组件集成（现有 430 个测试）            │  ← 每次 push
 │  序列化 · gRPC · DHT · Orchestrator ·           │
 │  HeterogeneousEngine · KVTransfer · API · DP ·  │
-│  TEE · TLS · HivemindBridge · Phase6 ·          │
+│  TEE · TLS · HivemindBridge · Phase6 · Phase8 · │
 │  Identity · RTT · Engram · WeightLoader         │
 ├─────────────────────────────────────────────────┤
 │  Layer 1: 纯单元测试（✅ 已完成）                │  ← 每次 push
 │  HeterogeneousEngine · KVTransfer · API · DP ·  │
-│  TEE · TLS · Hivemind · Phase6                  │
+│  TEE · TLS · Hivemind · Phase6 · Phase8         │
 └─────────────────────────────────────────────────┘
 ```
 
@@ -247,6 +247,9 @@ python -m pytest tests/test_hivemind_bridge.py -v
 
 # 运行 Phase 6 测试
 python -m pytest tests/test_phase6.py -v
+
+# 运行 Phase 8 测试
+python -m pytest tests/test_phase6.py -v -k "Phase8"
 
 # 运行 mock pipeline 模拟（Phase 1 & 2 端到端脚本，非 pytest）
 python mock_pipeline.py --phase 1 --seq-len 16 --hidden-dim 256

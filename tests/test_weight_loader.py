@@ -148,7 +148,7 @@ class TestWeightLoaderNoManifest:
         loader = WeightLoader(tmp_path, layer_start=0, layer_end=3, verify_integrity=False)
         from astra.inference.heterogeneous import HeterogeneousEngine, DeviceMap
         engine = HeterogeneousEngine(
-            device_map=DeviceMap(attention_on_gpu=False, moe_on_cpu=True, num_layers=3, hidden_dim=16),
+            device_map=DeviceMap(attention_on_gpu=False, moe_on_cpu=True, _hidden_dim_override=16),
         )
         n = loader.load_into(engine)
         assert n == 3
@@ -160,7 +160,7 @@ class TestWeightLoaderNoManifest:
         loader = WeightLoader(tmp_path, layer_start=0, layer_end=2, verify_integrity=False)
         from astra.inference.heterogeneous import HeterogeneousEngine, DeviceMap
         engine = HeterogeneousEngine(
-            device_map=DeviceMap(attention_on_gpu=False, moe_on_cpu=True, num_layers=2, hidden_dim=16),
+            device_map=DeviceMap(attention_on_gpu=False, moe_on_cpu=True, _hidden_dim_override=16),
         )
         # No expert tensors in our fixture — returns 0, no crash
         n = loader.load_experts(engine, [0, 1])

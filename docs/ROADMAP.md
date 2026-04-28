@@ -313,6 +313,116 @@ batching, speculative decoding, expert replication).
 
 ---
 
+## Phase 8 — Advanced Frontend UI (PLANNED)
+
+**Goal:** Redesign the Astra web portal with a professional chat interface, real-time
+model/device telemetry, mode switching, and comprehensive system monitoring.
+
+### 8.1 Chat Interface
+
+| Task | Status | Notes |
+|------|--------|-------|
+| Professional chat UI with streaming token animation | Planned | Build on existing SSE streaming from Phase 6 |
+| Message history with markdown rendering | Planned | Syntax highlighting for code blocks |
+| Prompt template library (predefined starter prompts) | Planned | Expand existing starter grid |
+| Conversation branching / edit & resend | Planned | Edit previous messages and re-send |
+| Token cost / credit display per message | Planned | Show compute cost per interaction |
+
+### 8.2 Mode Switching (Offline / P2P)
+
+| Task | Status | Notes |
+|------|--------|-------|
+| Toggle switch UI for offline ↔ P2P mode | Planned | Persist preference in localStorage |
+| Offline mode indicator with visual distinction | Planned | Yellow badge + banner message |
+| Mode-aware API routing (single-node vs. DHT orchestration) | Planned | Backend already supports mode via `create_app(mode=...)` |
+| Auto-detect available peers on mode switch | Planned | Trigger DHT refresh on P2P activation |
+
+### 8.3 Model Information Panel
+
+| Task | Status | Notes |
+|------|--------|-------|
+| Model name, version, architecture display | Planned | e.g., MiniMax-M2.5, DeepSeek-V4-Flash |
+| Parameter count (total / active per token) | Planned | 284B total, 12B active per token (MoE) |
+| Backend engine (KTransformers / NumPy stub / PyTorch) | Planned | Detect from `KTransformersAdapter` |
+| Context window size | Planned | e.g., 32K tokens |
+| `/api/model-info` backend endpoint | Planned | Add to `astra/api/openai_compat.py` |
+
+### 8.4 Token Output Speed
+
+| Task | Status | Notes |
+|------|--------|-------|
+| Real-time tokens-per-second (TPS) meter | Planned | EWMA-smoothed, updated per streaming chunk |
+| Latency breakdown (TTFT, inter-token latency) | Planned | Time-to-first-token + per-token timing |
+| `/api/token-speed` backend endpoint | Planned | Add to `astra/api/openai_compat.py` |
+
+### 8.5 Device Information
+
+| Task | Status | Notes |
+|------|--------|-------|
+| CPU model, core count, RAM display | Planned | `psutil` / `platform` based |
+| GPU model, VRAM, CUDA version display | Planned | `torch.cuda` + `nvidia-smi` info |
+| OS / Python version | Planned | System info from `platform` module |
+| Disk space available for model weights | Planned | `shutil.disk_usage` |
+| `/api/device-info` backend endpoint | Planned | Add to `astra/api/openai_compat.py` |
+
+### 8.6 UI Polish
+
+| Task | Status | Notes |
+|------|--------|-------|
+| Responsive layout (desktop + tablet) | Planned | CSS Grid + flexbox |
+| Dark theme (default) + light theme toggle | Planned | CSS custom properties; localStorage preference |
+| Keyboard shortcuts (Ctrl+Enter send, Ctrl+K palette) | Planned | Global keydown listener |
+| System notification on completion | Planned | Web Notification API |
+| Export conversation (JSON / Markdown) | Planned | Download button in chat header |
+
+---
+
+## Phase 9 — Production Launch & Ecosystem (PLANNED)
+
+**Goal:** Go from a validated multi-machine cluster to a publicly usable, economically
+sustainable decentralized inference network.
+
+> **Prerequisite:** Phase 7 hardware-blocked items resolved — at least one KTransformers
+> GPU node running MiniMax-M2.5 end-to-end with continuous batching active.
+
+### 9.1 Multi-Model Support
+
+| Task | Status | Notes |
+|------|--------|-------|
+| DeepSeek-V4 MLA kernel integration | 🔒 Blocked | Pending KTransformers upstream V4 MLA kernel support |
+| Per-model `DeviceMap` profiles (memory footprint, layer count, head config) | Planned | Separate profile files under `astra/inference/profiles/` |
+| Model registry API (`GET /v1/models` returns all loaded checkpoints) | Planned | Extend `openai_compat.py` — already returns one model |
+| Hot-swap model loading (load new checkpoint without restarting nodes) | Planned | WeightLoader + signal-based reload |
+
+### 9.2 Economic Model & Contributor Incentives
+
+| Task | Status | Notes |
+|------|--------|-------|
+| Formal tokenomics design (token issuance, burn, staking) | Planned | Currently: in-process ledger only (`/api/earnings`) |
+| On-chain earnings settlement (EVM / Solana) | Planned | Requires smart contract + wallet integration |
+| Contribution scoring (tokens/s, uptime SLA, geographic diversity) | Planned | Telemetry data already collected in `expert_telemetry.py` |
+| Anti-sybil / stake-to-participate mechanism | Planned | Prevents free-riding nodes |
+
+### 9.3 Operational Hardening
+
+| Task | Status | Notes |
+|------|--------|-------|
+| API rate limiting & quota enforcement | Planned | `openai_compat.py` currently has no rate limiting |
+| Graceful node drain (SIGTERM → finish in-flight requests → leave DHT) | Planned | `run_node.py` handles SIGTERM but does not drain |
+| Automatic TLS certificate rotation | Planned | `TofuTrustStore` pins certs; rotation needs out-of-band signaling |
+| Structured logging + OpenTelemetry traces | Planned | Currently uses Python `logging`; no trace propagation across nodes |
+| Prometheus metrics endpoint (`/metrics`) | Planned | Stats available via `engine.stats()` but not exported |
+
+### 9.4 Compliance & Privacy
+
+| Task | Status | Notes |
+|------|--------|-------|
+| GDPR data-subject request handling (prompt deletion) | Planned | No user-data retention layer currently |
+| Configurable DP budget per API key | Planned | `DPController` exists; budget is global, not per-user |
+| Audit log for TEE attestation events | Planned | `GramineBackend.attest()` returns report; no persistent log |
+
+---
+
 ## Dependency Upgrade Path
 
 | Component | Current (mock) | Production target |
@@ -357,56 +467,10 @@ batching, speculative decoding, expert replication).
 | [docs/TESTING.md](TESTING.md) | 完整测试方案，含待完成项与硬件测试要求 |
 | [docs/SECURITY.md](SECURITY.md) | 加密方案、威胁模型、差分隐私、mTLS 实施路线 |
 | [docs/FEASIBILITY.md](FEASIBILITY.md) | 算力门槛、地理微集群划分、带宽需求、风险分析 |
-| [docs/COMPLIANCE.md](COMPLIANCE.md) | 许可证合规、DeepSeek 模型使用条款、专利分析 |
-| [docs/TEE.md](TEE.md) | TEE 部署指南（Intel SGX + AMD SEV-SNP 硬件要求、manifest 生成） |
-| [docs/TLS.md](TLS.md) | gRPC mTLS 证书生成与分发流程 |
-| [docs/HIVEMIND.md](HIVEMIND.md) | hivemind DHT 配置、Bootstrap peer 设置、NAT 穿透 |
-
----
-
-## Phase 8 — Production Launch & Ecosystem (PLANNED)
-
-**Goal:** Go from a validated multi-machine cluster to a publicly usable, economically
-sustainable decentralized inference network.
-
-> **Prerequisite:** Phase 7 hardware-blocked items resolved — at least one KTransformers
-> GPU node running MiniMax-M2.5 end-to-end with continuous batching active.
-
-### 8.1 Multi-Model Support
-
-| Task | Status | Notes |
-|------|--------|-------|
-| DeepSeek-V4 MLA kernel integration | 🔒 Blocked | Pending KTransformers upstream V4 MLA kernel support |
-| Per-model `DeviceMap` profiles (memory footprint, layer count, head config) | Planned | Separate profile files under `astra/inference/profiles/` |
-| Model registry API (`GET /v1/models` returns all loaded checkpoints) | Planned | Extend `openai_compat.py` — already returns one model |
-| Hot-swap model loading (load new checkpoint without restarting nodes) | Planned | WeightLoader + signal-based reload |
-
-### 8.2 Economic Model & Contributor Incentives
-
-| Task | Status | Notes |
-|------|--------|-------|
-| Formal tokenomics design (token issuance, burn, staking) | Planned | Currently: in-process ledger only (`/api/earnings`) |
-| On-chain earnings settlement (EVM / Solana) | Planned | Requires smart contract + wallet integration |
-| Contribution scoring (tokens/s, uptime SLA, geographic diversity) | Planned | Telemetry data already collected in `expert_telemetry.py` |
-| Anti-sybil / stake-to-participate mechanism | Planned | Prevents free-riding nodes |
-
-### 8.3 Operational Hardening
-
-| Task | Status | Notes |
-|------|--------|-------|
-| API rate limiting & quota enforcement | Planned | `openai_compat.py` currently has no rate limiting |
-| Graceful node drain (SIGTERM → finish in-flight requests → leave DHT) | Planned | `run_node.py` handles SIGTERM but does not drain |
-| Automatic TLS certificate rotation | Planned | `TofuTrustStore` pins certs; rotation needs out-of-band signaling |
-| Structured logging + OpenTelemetry traces | Planned | Currently uses Python `logging`; no trace propagation across nodes |
-| Prometheus metrics endpoint (`/metrics`) | Planned | Stats available via `engine.stats()` but not exported |
-
-### 8.4 Compliance & Privacy
-
-| Task | Status | Notes |
-|------|--------|-------|
-| GDPR data-subject request handling (prompt deletion) | Planned | No user-data retention layer currently |
-| Configurable DP budget per API key | Planned | `DPController` exists; budget is global, not per-user |
-| Audit log for TEE attestation events | Planned | `GramineBackend.attest()` returns report; no persistent log |
+| [docs/COMPLIANCE.md](docs/COMPLIANCE.md) | 许可证合规、DeepSeek 模型使用条款、专利分析 |
+| [docs/TEE.md](docs/TEE.md) | TEE 部署指南（Intel SGX + AMD SEV-SNP 硬件要求、manifest 生成） |
+| [docs/TLS.md](docs/TLS.md) | gRPC mTLS 证书生成与分发流程 |
+| [docs/HIVEMIND.md](docs/HIVEMIND.md) | hivemind DHT 配置、Bootstrap peer 设置、NAT 穿透 |
 
 ---
 
@@ -423,5 +487,5 @@ sustainable decentralized inference network.
    `docs/TLS.md`.
 5. **No hardware CI** — GPU integration tests require a self-hosted runner.
    See [docs/TESTING.md](TESTING.md) for the pending hardware test plan.
-6. **No rate limiting** — The OpenAI-compatible API has no per-key quota enforcement. Phase 8.3 covers this.
-7. **Earnings ledger is in-process only** — Token accounting resets on restart; on-chain settlement is a Phase 8.2 item.
+6. **No rate limiting** — The OpenAI-compatible API has no per-key quota enforcement. Phase 9.3 covers this.
+7. **Earnings ledger is in-process only** — Token accounting resets on restart; on-chain settlement is a Phase 9.2 item.

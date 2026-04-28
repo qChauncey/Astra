@@ -310,3 +310,154 @@ class TestEarningsCredit:
                 "token": token,
             })
             assert resp.status_code == 400, f"amount={amt} should fail"
+
+
+# ══════════════════════════════════════════════════════════════════ #
+# Phase 8: /api/model-info                                           #
+# ══════════════════════════════════════════════════════════════════ #
+
+class TestModelInfo:
+    def test_returns_json_with_expected_keys(self, client):
+        resp = client.get("/api/model-info")
+        assert resp.status_code == 200
+        body = resp.json()
+        for key in ("name", "version", "architecture", "parameter_count",
+                     "num_layers", "num_experts", "num_active_experts",
+                     "vocab_size", "hidden_dim", "status", "supported_modes"):
+            assert key in body, f"missing key: {key}"
+
+    def test_name_is_not_placeholder(self, client):
+        body = client.get("/api/model-info").json()
+        assert body["name"] not in (None, "", "—", "unknown")
+        assert isinstance(body["name"], str) and len(body["name"]) > 1
+
+    def test_parameter_count_is_string_with_B(self, client):
+        body = client.get("/api/model-info").json()
+        assert "B" in body["parameter_count"]
+
+    def test_num_layers_is_positive_int(self, client):
+        body = client.get("/api/model-info").json()
+        assert isinstance(body["num_layers"], int)
+        assert body["num_layers"] > 0
+
+    def test_status_indicates_stub(self, client):
+        body = client.get("/api/model-info").json()
+        assert "stub" in body["status"].lower()
+
+
+# ══════════════════════════════════════════════════════════════════ #
+# Phase 8: /api/device-info                                          #
+# ══════════════════════════════════════════════════════════════════ #
+
+class TestDeviceInfo:
+    def test_returns_json_with_expected_keys(self, client):
+        resp = client.get("/api/device-info")
+        assert resp.status_code == 200
+        body = resp.json()
+        for key in ("hostname", "os", "python_version", "cpu", "gpu", "ram_total"):
+            assert key in body, f"missing key: {key}"
+
+    def test_os_is_not_empty(self, client):
+        body = client.get("/api/device-info").json()
+        assert body["os"]
+        assert isinstance(body["os"], str)
+
+    def test_python_version_is_semver_like(self, client):
+        body = client.get("/api/device-info").json()
+        # Should look like "3.x.y"
+        assert body["python_version"].startswith("3.")
+
+    def test_hostname_is_not_empty(self, client):
+        body = client.get("/api/device-info").json()
+        assert body["hostname"]
+        assert isinstance(body["hostname"], str)
+
+
+# ══════════════════════════════════════════════════════════════════ #
+# Phase 8: /api/token-speed                                          #
+# ══════════════════════════════════════════════════════════════════ #
+
+class TestTokenSpeed:
+    def test_returns_json_with_expected_keys(self, client):
+        resp = client.get("/api/token-speed")
+        assert resp.status_code == 200
+        body = resp.json()
+        for key in ("tokens_per_second", "total_tokens_generated", "ts"):
+            assert key in body, f"missing key: {key}"
+
+    def test_starts_at_zero_no_tokens_generated(self, client):
+        body = client.get("/api/token-speed").json()
+        # tps may be 0 or 0.0 — both float-ish
+        assert float(body["tokens_per_second"]) >= 0
+        assert body["total_tokens_generated"] >= 0
+
+    def test_ts_is_recent(self, client):
+        import time
+        body = client.get("/api/token-speed").json()
+        # Should be within a few seconds of now
+        assert abs(body["ts"] - int(time.time())) < 10
+
+    def test_tps_increases_after_chat(self, client):
+        # Make a streaming chat call (triggers token speed measurement)
+        resp = client.post("/v1/chat/completions", json={
+            "model": "deepseek-v4-flash",
+            "messages": [{"role": "user", "content": "Hello world test"}],
+            "stream": False,
+            "max_tokens": 16,
+        })
+        assert resp.status_code == 200
+
+        # Token speed should now show > 0 total tokens
+        body = client.get("/api/token-speed").json()
+        assert body["total_tokens_generated"] > 0
+
+
+# ══════════════════════════════════════════════════════════════════ #
+# Phase 8: /api/mode (get and set)                                    #
+# ══════════════════════════════════════════════════════════════════ #
+
+class TestMode:
+    def test_get_mode_returns_json(self, client):
+        resp = client.get("/api/mode")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert "mode" in body
+        assert "available" in body
+        assert isinstance(body["available"], list)
+        assert "offline" in body["available"]
+        assert "p2p" in body["available"]
+
+    def test_default_mode_is_p2p(self, client):
+        body = client.get("/api/mode").json()
+        assert body["mode"] in ("p2p", "offline")
+
+    def test_switch_to_offline(self, client):
+        resp = client.post("/api/mode", json={"mode": "offline"})
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["mode"] == "offline"
+
+        # Verify GET reflects change
+        assert client.get("/api/mode").json()["mode"] == "offline"
+
+    def test_switch_to_p2p(self, client):
+        # First switch to offline
+        client.post("/api/mode", json={"mode": "offline"})
+        # Then back to p2p
+        resp = client.post("/api/mode", json={"mode": "p2p"})
+        assert resp.status_code == 200
+        assert resp.json()["mode"] == "p2p"
+        assert client.get("/api/mode").json()["mode"] == "p2p"
+
+    def test_invalid_mode_rejected(self, client):
+        resp = client.post("/api/mode", json={"mode": "invalid"})
+        assert resp.status_code == 400
+        assert "error" in resp.json()
+
+    def test_empty_mode_rejected(self, client):
+        resp = client.post("/api/mode", json={"mode": ""})
+        assert resp.status_code == 400
+
+    def test_missing_mode_key_rejected(self, client):
+        resp = client.post("/api/mode", json={})
+        assert resp.status_code == 400

@@ -7,9 +7,9 @@
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org)
-[![Tests](https://img.shields.io/badge/tests-498%20passed-brightgreen)]()
+[![Tests](https://img.shields.io/badge/tests-486%20passed-brightgreen)]()
 [![CI](https://github.com/qchauncey/astra/actions/workflows/ci.yml/badge.svg)](.github/workflows/ci.yml)
-[![Status](https://img.shields.io/badge/status-Phase%201--7%20complete-blue)]()
+[![Status](https://img.shields.io/badge/status-Phase%201--7%20complete%20%7C%20Phase%208%20planned-blue)]()
 
 **Astra** is an open-source P2P distributed inference framework that runs large MoE models across a cluster of commodity PCs (e.g., RTX 5070 Ti, 16 GB VRAM each) by combining:
 
@@ -17,7 +17,7 @@
 - **[KTransformers](https://github.com/kvcache-ai/ktransformers)**-style heterogeneous GPU/CPU compute split
 - **[hivemind](https://github.com/learning-at-home/hivemind)** DHT for peer discovery and key-value storage
 
-> **Alpha.** Phase 1–7 are complete and tested (498 passed, 1 skipped, all passing on CPU/NumPy CI). Current validation target: **MiniMax-M2.5** (126 GB, 62 layers, GQA, 200K vocab) — real-weight loading, GQA attention, MoE expert dequant, and forward pass have been verified end-to-end. The `KTransformersAdapter` (`astra/inference/ktransformers_adapter.py`) provides GPU-accelerated torch fallback for MLA, RMSNorm, RoPE, and matmul ops when PyTorch + CUDA are available (validated on WSL2 + NVIDIA RTX 5070 Ti). Phase 7 (weight loading, continuous batching, speculative decoding, expert replication, tokenizer, cluster affinity, orchestrator load shedding) is complete. **DeepSeek-V4** support is planned but blocked pending KTransformers upstream V4 architecture adaptation.
+> **Alpha.** Phase 1–7 are complete and tested (486 passed, 2 failed, 1 skipped on CPU/NumPy CI). Current validation target: **MiniMax-M2.5** (126 GB, 62 layers, GQA, 200K vocab) — real-weight loading, GQA attention, MoE expert dequant, and forward pass have been verified end-to-end. The `KTransformersAdapter` (`astra/inference/ktransformers_adapter.py`) provides GPU-accelerated torch fallback for MLA, RMSNorm, RoPE, and matmul ops when PyTorch + CUDA are available (validated on WSL2 + NVIDIA RTX 5070 Ti). Phase 7 (weight loading, continuous batching, speculative decoding, expert replication, tokenizer, cluster affinity, orchestrator load shedding) is complete. Phase 8 (Advanced Frontend UI: chat interface, mode switching, model/device info, token speed meter) is planned. **DeepSeek-V4** support is planned but blocked pending KTransformers upstream V4 architecture adaptation.
 
 ---
 
@@ -32,6 +32,8 @@
 | **Phase 5** | gRPC TLS mutual auth + hivemind multi-machine DHT integration | ✅ Complete |
 | **Phase 6** | SPA dashboard (Chat, Monitor, Identity, Earnings), challenge-response login, real-time monitoring, token accounting | ✅ Complete |
 | **Phase 7** | Inference engine (MiniMax-M2.5 validation, weight loading, continuous batching, speculative decoding, expert replication, tokenizer) | ✅ Complete |
+| **Phase 8** | Advanced Frontend UI (chat interface, mode switching, model/device info, token speed meter) | 📋 Planned |
+| **Phase 9** | Production Launch & Ecosystem (multi-model, tokenomics, operational hardening) | 📋 Planned |
 
 > See [docs/ROADMAP.md](docs/ROADMAP.md) for per-task breakdown and prerequisites.
 
@@ -102,7 +104,7 @@ graph TD
 | Module | Purpose |
 |--------|---------|
 | `astra.api.openai_compat` | OpenAI `/v1/chat/completions` + SSE streaming |
-| `astra.api.static/index.html` | SPA dashboard: Chat, Monitor, Login, Earnings |
+| `astra.api.static/index.html` | SPA dashboard: Chat, Monitor, Login, Earnings (Phase 8: advanced chat UI, mode toggle, model info, token speed, device info) |
 
 ---
 
@@ -127,7 +129,7 @@ python mock_pipeline.py --phase 1 --seq-len 16 --hidden-dim 256
 # Phase 2 — dual-node gRPC pipeline
 python mock_pipeline.py --phase 2 --seq-len 16 --hidden-dim 256
 
-# Full test suite (498 passed, 1 skipped, CPU-only)
+# Full test suite (486 passed, 2 failed, 1 skipped, CPU-only)
 python -m pytest tests/ -v
 ```
 
@@ -143,13 +145,13 @@ astra/
 ├── routing/              # GeoAwareMoERouter (haversine RTT + gate + dispatch), expert telemetry, cluster affinity
 ├── rpc/                  # gRPC proto, server/client, TLS, KV-cache transfer
 ├── network/              # AstraDHT, HivemindBridge, Orchestrator, RTT, Identity, Engram
-├── api/                  # OpenAI-compatible FastAPI + SPA dashboard
+├── api/                  # OpenAI-compatible FastAPI + SPA dashboard (Phase 8: advanced UI + telemetry endpoints)
 └── config/               # Model config, defaults
 
 mock_pipeline.py          # Phase 1 & 2 local simulation harness
 scripts/                  # run_node.py, run_cluster.py, check_env.py, benchmark.py, load_test.py
 installer/                # One-click installers (install.bat/.ps1/.sh, start.bat)
-tests/                    # 498 pytest tests + 1 skipped (all passing on CPU/NumPy CI)
+tests/                    # 486 pytest tests passed + 2 failed + 1 skipped (CPU/NumPy CI)
 docs/                     # ARCHITECTURE, ROADMAP, TESTING, INSTALL, SECURITY, etc.
 ```
 
@@ -161,8 +163,8 @@ docs/                     # ARCHITECTURE, ROADMAP, TESTING, INSTALL, SECURITY, e
 |-----|----------|
 | [docs/INSTALL.md](docs/INSTALL.md) | Per-platform installation guide |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | System design, data flow, wire format spec |
-| [docs/ROADMAP.md](docs/ROADMAP.md) | Phase-by-phase plan (Phase 1–7 ✓ — MiniMax-M2.5 validation, continuous batching, speculative decoding, expert replication, weight loading, tokenizer) |
-| [docs/TESTING.md](docs/TESTING.md) | Test strategy: 498 tests + hardware test checklist |
+| [docs/ROADMAP.md](docs/ROADMAP.md) | Phase-by-phase plan (Phase 1–7 ✓, Phase 8 planned — Advanced Frontend UI) |
+| [docs/TESTING.md](docs/TESTING.md) | Test strategy: 486 tests + hardware test checklist |
 | [docs/SECURITY.md](docs/SECURITY.md) | mTLS, differential privacy, TEE attestation |
 | [docs/TEE.md](docs/TEE.md) | TEE deployment: Intel SGX (Gramine) & AMD SEV-SNP |
 | [docs/TLS.md](docs/TLS.md) | mTLS setup and configuration guide |
