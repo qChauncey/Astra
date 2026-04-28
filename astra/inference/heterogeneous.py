@@ -191,11 +191,17 @@ def _detect_backend() -> tuple:
         if torch.cuda.is_available():
             # Smoke test: verify the installed PyTorch build actually supports
             # this GPU's compute capability (e.g., sm_120 Blackwell requires
-            # a newer PyTorch than what cu124 wheels ship).  A reduction with
-            # dim= exercises the kernel flavour used by RMSNorm/attention.
+            # a newer PyTorch than what cu124 wheels ship).
+            # Must exercise the exact kernel path used by rms_layer_norm():
+            #   3D float32 tensor → **2 → mean(dim=-1, keepdim=True) →
+            #   sqrt → division → multiply.
+            # A simple 2D reduction may pass sm_120 while the 3D keepdim
+            # variant fails, so we mirror the real call precisely.
             try:
-                t = torch.randn(16, 64, device="cuda")
-                _ = torch.mean(t, dim=-1)
+                t3d = torch.randn(4, 16, 64, device="cuda",
+                                  dtype=torch.float32)
+                _ = torch.sqrt(torch.mean(t3d ** 2, dim=-1,
+                                          keepdim=True) + 1e-6)
                 torch.cuda.synchronize()
             except Exception:
                 pass  # GPU too new for this PyTorch build → fall through
