@@ -14,7 +14,7 @@ def main():
     print(f"Model dir: {MODEL_DIR}")
     idx = ModelIndex(MODEL_DIR)
     print(f"Total tensors in index: {len(idx._tensor_to_shard)}")
-    
+
     shard_set = set(idx._tensor_to_shard.values())
     print(f"Unique shards: {len(shard_set)}")
 
