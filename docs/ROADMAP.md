@@ -165,7 +165,7 @@ authentication, weight integrity, and storage/compute role separation.
 > **Scope note (April 2026):** All code deliverables — TLS certificate generation,
 > mTLS server/client integration, TOFU trust store, hivemind DHT bridge, and the
 > `create_dht()` factory with graceful degradation — are complete and tested
-> (498 passed, 1 skipped). Multi-machine bootstrap validation (multiple physical
+> (486 passed, 3 skipped). Multi-machine bootstrap validation (multiple physical
 > nodes) is a deployment verification step, not a software gap. See
 > [docs/HIVEMIND.md](HIVEMIND.md) §8 Production Checklist for the per-node setup
 > procedure.
@@ -235,7 +235,10 @@ batching, speculative decoding, expert replication).
 | CI workflow: `.github/workflows/hardware_test.yml` | ✓ Done | Self-hosted runner config — attach runner to activate |
 | Benchmark tooling: `scripts/benchmark.py` | ✓ Done | Token/s, P50/P95/P99; single / gRPC / API modes |
 | Docker Compose multi-node deployment | ✓ Done | `docker-compose.yml` — 4-service cluster (dht-seed + 3 nodes + gateway) |
+| GPU Docker variant | ✓ Done | `Dockerfile.gpu` + `docker-compose.gpu.yml` — CUDA 12.4; per-node GPU device assignment |
 | Load-test script: `scripts/load_test.py` | ✓ Done | asyncio+httpx concurrent driver; SLA thresholds; JSON output |
+| MiniMax-M2.5 shard integrity verification | ✓ Done | `scripts/verify_minimax_m2.py` — ModelIndex + shard count validation |
+| MiniMax-M2.5 end-to-end integration test | ✓ Done | `scripts/test_real_minimax_m2.py` — real-weight GQA forward pass + MoE dequant (requires local weights) |
 
 ---
 
@@ -329,7 +332,7 @@ batching, speculative decoding, expert replication).
 
 | Layer | Tool | Current Status | Coverage Target |
 |-----|------|---------|---------|
-| Unit (CPU) | pytest | ✅ 498 passed + 1 skipped | Serialization, LRU cache, Haversine + real RTT, DHT, Engram, Peer Identity, Weight Manifest, gRPC TLS, HeterogeneousEngine, Tokenizer, KVTransfer, OpenAI API, Phase 6 dashboard, Continuous Batching, Speculative Decoding, Expert Replication, Weight Loader |
+| Unit (CPU) | pytest | ✅ 486 passed + 3 skipped | Serialization, LRU cache, Haversine + real RTT, DHT, Engram, Peer Identity, Weight Manifest, gRPC TLS, HeterogeneousEngine, Tokenizer, KVTransfer, OpenAI API, Phase 6 dashboard, Continuous Batching, Speculative Decoding, Expert Replication, Weight Loader |
 | Integration (local) | pytest + threading | ✅ Covered | mock_pipeline.py Phase 1 & 2 |
 | Hardware Integration | Self-hosted GPU Runner | ❌ Not configured | KTransformers C++ kernels, real-weight numerical alignment |
 | Load Test | scripts/load_test.py (asyncio+httpx) | ✅ Implemented | 100 concurrent requests, throughput & P99 latency |
@@ -349,10 +352,61 @@ batching, speculative decoding, expert replication).
 
 | 文档 | 内容 |
 |-----|-----|
+| [docs/ARCHITECTURE.md](ARCHITECTURE.md) | 系统架构、设计决策、模块依赖图、核心挑战 |
+| [docs/INSTALL.md](INSTALL.md) | 各平台安装指南（Linux / macOS / Windows WSL2） |
 | [docs/TESTING.md](TESTING.md) | 完整测试方案，含待完成项与硬件测试要求 |
 | [docs/SECURITY.md](SECURITY.md) | 加密方案、威胁模型、差分隐私、mTLS 实施路线 |
 | [docs/FEASIBILITY.md](FEASIBILITY.md) | 算力门槛、地理微集群划分、带宽需求、风险分析 |
 | [docs/COMPLIANCE.md](COMPLIANCE.md) | 许可证合规、DeepSeek 模型使用条款、专利分析 |
+| [docs/TEE.md](TEE.md) | TEE 部署指南（Intel SGX + AMD SEV-SNP 硬件要求、manifest 生成） |
+| [docs/TLS.md](TLS.md) | gRPC mTLS 证书生成与分发流程 |
+| [docs/HIVEMIND.md](HIVEMIND.md) | hivemind DHT 配置、Bootstrap peer 设置、NAT 穿透 |
+
+---
+
+## Phase 8 — Production Launch & Ecosystem (PLANNED)
+
+**Goal:** Go from a validated multi-machine cluster to a publicly usable, economically
+sustainable decentralized inference network.
+
+> **Prerequisite:** Phase 7 hardware-blocked items resolved — at least one KTransformers
+> GPU node running MiniMax-M2.5 end-to-end with continuous batching active.
+
+### 8.1 Multi-Model Support
+
+| Task | Status | Notes |
+|------|--------|-------|
+| DeepSeek-V4 MLA kernel integration | 🔒 Blocked | Pending KTransformers upstream V4 MLA kernel support |
+| Per-model `DeviceMap` profiles (memory footprint, layer count, head config) | Planned | Separate profile files under `astra/inference/profiles/` |
+| Model registry API (`GET /v1/models` returns all loaded checkpoints) | Planned | Extend `openai_compat.py` — already returns one model |
+| Hot-swap model loading (load new checkpoint without restarting nodes) | Planned | WeightLoader + signal-based reload |
+
+### 8.2 Economic Model & Contributor Incentives
+
+| Task | Status | Notes |
+|------|--------|-------|
+| Formal tokenomics design (token issuance, burn, staking) | Planned | Currently: in-process ledger only (`/api/earnings`) |
+| On-chain earnings settlement (EVM / Solana) | Planned | Requires smart contract + wallet integration |
+| Contribution scoring (tokens/s, uptime SLA, geographic diversity) | Planned | Telemetry data already collected in `expert_telemetry.py` |
+| Anti-sybil / stake-to-participate mechanism | Planned | Prevents free-riding nodes |
+
+### 8.3 Operational Hardening
+
+| Task | Status | Notes |
+|------|--------|-------|
+| API rate limiting & quota enforcement | Planned | `openai_compat.py` currently has no rate limiting |
+| Graceful node drain (SIGTERM → finish in-flight requests → leave DHT) | Planned | `run_node.py` handles SIGTERM but does not drain |
+| Automatic TLS certificate rotation | Planned | `TofuTrustStore` pins certs; rotation needs out-of-band signaling |
+| Structured logging + OpenTelemetry traces | Planned | Currently uses Python `logging`; no trace propagation across nodes |
+| Prometheus metrics endpoint (`/metrics`) | Planned | Stats available via `engine.stats()` but not exported |
+
+### 8.4 Compliance & Privacy
+
+| Task | Status | Notes |
+|------|--------|-------|
+| GDPR data-subject request handling (prompt deletion) | Planned | No user-data retention layer currently |
+| Configurable DP budget per API key | Planned | `DPController` exists; budget is global, not per-user |
+| Audit log for TEE attestation events | Planned | `GramineBackend.attest()` returns report; no persistent log |
 
 ---
 
@@ -369,3 +423,5 @@ batching, speculative decoding, expert replication).
    `docs/TLS.md`.
 5. **No hardware CI** — GPU integration tests require a self-hosted runner.
    See [docs/TESTING.md](TESTING.md) for the pending hardware test plan.
+6. **No rate limiting** — The OpenAI-compatible API has no per-key quota enforcement. Phase 8.3 covers this.
+7. **Earnings ledger is in-process only** — Token accounting resets on restart; on-chain settlement is a Phase 8.2 item.

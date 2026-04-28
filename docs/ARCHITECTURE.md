@@ -1,12 +1,17 @@
 # Astra — System Architecture
 
-> Version 0.1 · April 2025 · Apache License 2.0
+> Version 0.2 · April 2026 · Apache License 2.0
 
 ---
 
 ## 1. Vision & Objectives
 
-Astra enables **distributed inference of DeepSeek-V4-Flash (284B parameters)** on clusters of commodity PCs equipped with consumer GPUs (e.g. RTX 5070 Ti, 16 GB VRAM). It achieves this by:
+Astra enables **distributed inference of large MoE transformers** on clusters of commodity PCs equipped with consumer GPUs (e.g. RTX 5070 Ti, 16 GB VRAM).
+
+**Current validation target:** MiniMax-M2.5 (126 GB, 62 layers, GQA, 200K vocab) — real-weight loading and forward pass verified end-to-end.
+**Planned target:** DeepSeek-V4 (284B parameters, MLA attention) — blocked pending KTransformers upstream V4 MLA kernel support.
+
+Astra achieves distributed inference by:
 
 1. **Pipeline parallelism** — slicing the 61-layer transformer across multiple nodes over gRPC.
 2. **Heterogeneous compute** — routing Attention to GPU, MoE FFN experts to CPU RAM, per the KTransformers model.
