@@ -13,6 +13,7 @@
 # limitations under the License.
 
 from .heterogeneous import HeterogeneousEngine, DeviceMap, MLAWeights, GQAWeights
+from .ktransformers_adapter import KTransformersAdapter, detect_ktransformers
 from .shared_expert_cache import SharedExpertCache
 from .tokenizer import AstraTokenizer, load_tokenizer, get_tokenizer
 from .weight_loader import WeightLoader, MmapWeightStore, SafetensorsMmapReader
@@ -21,7 +22,8 @@ from .batch_scheduler import ContinuousBatchScheduler, BatchRequest, BatchGroup,
 from .batch_utils import BatchInfo, pad_sequences, unpad_output, compute_batch_metrics
 
 __all__ = [
-    "HeterogeneousEngine", "DeviceMap", "SharedExpertCache",
+    "HeterogeneousEngine", "DeviceMap", "KTransformersAdapter",
+    "detect_ktransformers", "SharedExpertCache",
     "MLAWeights", "GQAWeights",
     "AstraTokenizer", "load_tokenizer", "get_tokenizer",
     "WeightLoader",
