@@ -17,7 +17,7 @@
 - **[KTransformers](https://github.com/kvcache-ai/ktransformers)**-style heterogeneous GPU/CPU compute split
 - **[hivemind](https://github.com/learning-at-home/hivemind)** DHT for peer discovery and key-value storage
 
-> **Alpha.** Phase 1–7 are complete and tested (498 passed, 1 skipped, all passing on CPU/NumPy CI). Current validation target: **MiniMax-M2.5** (126 GB, 62 layers, GQA, 200K vocab) — real-weight loading, GQA attention, MoE expert dequant, and forward pass have been verified end-to-end. Phase 7 (weight loading, continuous batching, speculative decoding, expert replication, tokenizer) is complete with MiniMax-M2.5 as the primary benchmark. **DeepSeek-V4** support is planned but blocked pending KTransformers upstream V4 architecture adaptation.
+> **Alpha.** Phase 1–7 are complete and tested (498 passed, 1 skipped, all passing on CPU/NumPy CI). Current validation target: **MiniMax-M2.5** (126 GB, 62 layers, GQA, 200K vocab) — real-weight loading, GQA attention, MoE expert dequant, and forward pass have been verified end-to-end. The `KTransformersAdapter` (`astra/inference/ktransformers_adapter.py`) provides GPU-accelerated torch fallback for MLA, RMSNorm, RoPE, and matmul ops when PyTorch + CUDA are available (validated on WSL2 + NVIDIA RTX 5070 Ti). Phase 7 (weight loading, continuous batching, speculative decoding, expert replication, tokenizer, cluster affinity, orchestrator load shedding) is complete. **DeepSeek-V4** support is planned but blocked pending KTransformers upstream V4 architecture adaptation.
 
 ---
 

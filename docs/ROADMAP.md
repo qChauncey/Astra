@@ -85,7 +85,7 @@ authentication, weight integrity, and storage/compute role separation.
 | KV-cache streaming between nodes (`TransferKVCache` RPC) | ✓ Done | `astra/rpc/kv_transfer.py` — chunked ≤3 MB streaming |
 | DeepSeek-V4 checkpoint loader (safetensors) | ✓ Done | `astra/inference/weight_loader.py` |
 | Tokenizer integration (HuggingFace + stub fallback) | ✓ Done | `astra/inference/tokenizer.py` |
-| Real KTransformers C++ binding integration | → Phase 7 | Hardware-blocked |
+| Real KTransformers C++ binding integration | → Phase 7 | Hardware-blocked (adapter layer done — torch_fallback validated on WSL2 GPU) |
 | Speculative decoding | → Phase 7 | Hardware-blocked |
 | Continuous batching | → Phase 7 | Hardware-blocked |
 
@@ -264,14 +264,15 @@ batching, speculative decoding, expert replication).
 > (KTransformers C++ binding) and the hardware prerequisites remain.
 
 #### 7.3.1 KTransformers C++ Binding
-**Effort:** Medium — adapter layer only; inference contract already defined.
+**Effort:** Medium — adapter layer already built; C++ binding still pending.
 
 | Task | Status | Notes |
 |------|--------|-------|
-| Replace numpy stub in `HeterogeneousEngine._attention_forward()` | 🔒 Blocked | Call `ktransformers.ops.mla_forward(q, k, v, ...)` instead of numpy matmul |
-| Replace numpy stub in `HeterogeneousEngine._moe_forward()` | 🔒 Blocked | Call `ktransformers.ops.expert_forward(hidden, weight_path, ...)` |
+| `KTransformersAdapter` abstraction layer (`detect_ktransformers`, MLA, RMSNorm, RoPE, matmul) | ✓ Complete | `astra/inference/ktransformers_adapter.py` — GPU-accelerated torch fallback; validated on WSL2 + NVIDIA RTX 5070 Ti |
+| `HeterogeneousEngine` wired to dispatch through `KTransformersGPUWrapper` | ✓ Complete | `astra/inference/heterogeneous.py` — `KTransformersGPUWrapper` created in `_init_ktransformers()` |
+| End-to-end smoke test on real GPU hardware | ✓ Complete | `scripts/smoke_kt_adapter.py` — MLA, RMSNorm, RoPE, matmul all validated (correct shapes, dtypes, no NaN) |
+| Replace torch fallback with real `ktransformers.ops.mla_forward` | 🔒 Blocked | Requires `ktransformers` compiled for target CUDA arch + MiniMax-M2.5 safetensors shards |
 | Handle CUDA tensor lifecycle (device placement, dtype casting) | 🔒 Blocked | Tensors must stay on GPU between attention and MoE to avoid PCIe round-trip |
-| Update `HeterogeneousEngine.from_gpu_config()` to pass CUDA device | 🔒 Blocked | Currently passes dummy device string |
 | **Prerequisite** | 🔒 Blocked | `ktransformers` compiled for target CUDA arch + MiniMax-M2.5 safetensors shards; DeepSeek-V4 pending KTransformers upstream V4 MLA kernel |
 
 #### 7.3.2 Continuous Batching
@@ -313,8 +314,8 @@ batching, speculative decoding, expert replication).
 
 | Component | Current (mock) | Production target |
 |-----------|---------------|-------------------|
-| Tensor compute | numpy stub | KTransformers C++ + CUDA |
-| Attention kernel | numpy `@` matmul | `ktransformers.ops.mla_forward` |
+| Tensor compute | numpy stub / torch_fallback (GPU-accelerated via adapter) | KTransformers C++ + CUDA |
+| Attention kernel | numpy `@` matmul / PyTorch GPU (via `KTransformersAdapter`) | `ktransformers.ops.mla_forward` |
 | DHT | in-memory dict / `HivemindDHT` (Phase 5 done) | `hivemind.DHT` |
 | Transport | gRPC | gRPC with mTLS (done — Phase 5) ✅ |
 | Model weights | random arrays | MiniMax-M2.5 safetensors shards (primary); DeepSeek-V4 pending KTransformers upstream V4 adaptation |
@@ -358,8 +359,7 @@ batching, speculative decoding, expert replication).
 ## Known Limitations (Alpha)
 
 1. **MiniMax-M2.5 validated; DeepSeek-V4 pending** — Real-weight loading, GQA attention, MoE expert dequant, and forward pass have been verified end-to-end with MiniMax-M2.5 (126 GB, 62 layers). Phase 7 software optimizations (continuous batching, speculative decoding, expert replication, weight loader, tokenizer, weight manifest) are complete on CPU; KTransformers C++ binding integration is blocked pending hardware. DeepSeek-V4 support is planned but blocked pending KTransformers upstream V4 architecture adaptation.
-2. **KTransformersStub is numpy** — ~100× slower than C++ CUDA kernels.
-   Use for correctness testing only.
+2. **KTransformersStub is numpy / torch_fallback** — The `KTransformersAdapter` now provides GPU-accelerated torch fallback when PyTorch + CUDA are available (validated on WSL2 + NVIDIA RTX 5070 Ti). This is faster than pure numpy but still ~10–20× slower than KTransformers C++ CUDA kernels. Use for correctness testing only.
 3. **DHT bridge ready, multi-machine validation pending** — The hivemind DHT
    bridge (`astra/network/hivemind_bridge.py`) is fully implemented and tested.
    Multi-machine bootstrap and cross-machine discovery require multiple physical

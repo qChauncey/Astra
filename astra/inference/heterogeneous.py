@@ -60,6 +60,7 @@ from ..config.model_config import (
 )
 from .differential_privacy import LayerDPInjector
 from .shared_expert_cache import ExpertWeights, SharedExpertCache
+from .ktransformers_adapter import KTransformersAdapter
 
 
 # ------------------------------------------------------------------ #
@@ -294,6 +295,11 @@ class KTransformersGPUWrapper:
         self._name = backend_name
         self._mod = backend_module
         self._stub = KTransformersStub()
+        # Phase 7.3.1: when ktransformers_cpp is active, create the real adapter
+        if backend_name == "ktransformers_cpp":
+            self._kt_adapter = KTransformersAdapter()
+        else:
+            self._kt_adapter = None
 
     @property
     def backend_name(self) -> str:
@@ -333,6 +339,8 @@ class KTransformersGPUWrapper:
         PyTorch CUDA path uses memory-efficient scaled_dot_product_attention
         which internally dispatches to FlashAttention-2 when available.
         """
+        if self._name == "ktransformers_cpp" and self._kt_adapter is not None:
+            return self._kt_adapter.multi_latent_attention(query, key, value, mask, head_dim)
         if self._name == "pytorch_cuda":
             q = self._mod.tensor(query, device="cuda", dtype=self._mod.float16)
             k = self._mod.tensor(key, device="cuda", dtype=self._mod.float16)
@@ -360,6 +368,8 @@ class KTransformersGPUWrapper:
         eps: float = 1e-6,
     ) -> np.ndarray:
         """RMSNorm dispatched to GPU if available."""
+        if self._name == "ktransformers_cpp" and self._kt_adapter is not None:
+            return self._kt_adapter.rms_layer_norm(x, weight, eps)
         if self._name == "pytorch_cuda":
             x_t = self._mod.tensor(x, device="cuda", dtype=self._mod.float32)
             w_t = self._mod.tensor(weight, device="cuda", dtype=self._mod.float32)
@@ -382,6 +392,8 @@ class KTransformersGPUWrapper:
         theta: float = 10000.0,
     ) -> np.ndarray:
         """RoPE dispatched to GPU if available."""
+        if self._name == "ktransformers_cpp" and self._kt_adapter is not None:
+            return self._kt_adapter.rope_embedding(x, position_ids, theta)
         if self._name == "pytorch_cuda":
             x_t = self._mod.tensor(x, device="cuda", dtype=self._mod.float16)
             seq_len, dim = x_t.shape
@@ -415,6 +427,8 @@ class KTransformersGPUWrapper:
 
     def matrix_multiply(self, a: np.ndarray, b: np.ndarray) -> np.ndarray:
         """General matrix multiply (matmul) dispatched to GPU if available."""
+        if self._name == "ktransformers_cpp" and self._kt_adapter is not None:
+            return self._kt_adapter.matrix_multiply(a, b)
         if self._name == "pytorch_cuda":
             a_t = self._mod.tensor(a, device="cuda", dtype=self._mod.float32)
             b_t = self._mod.tensor(b, device="cuda", dtype=self._mod.float32)
