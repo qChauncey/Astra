@@ -261,6 +261,11 @@ python -m pytest tests/test_weight_loader.py -v
 python -m pytest tests/test_tokenizer.py -v
 python -m pytest tests/test_weight_manifest.py -v
 
+# 运行 Phase 7 硬件验证
+python scripts/check_env.py
+python scripts/benchmark.py --mode single --num-runs 50 --seq-len 64 --hidden-dim 256
+python scripts/load_test.py --concurrency 5 --duration 5 --url http://localhost:8080
+
 # 运行 mock pipeline 模拟（Phase 1 & 2 端到端脚本，非 pytest）
 python mock_pipeline.py --phase 1 --seq-len 16 --hidden-dim 256
 python mock_pipeline.py --phase 2 --seq-len 16 --hidden-dim 256

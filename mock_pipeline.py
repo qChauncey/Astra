@@ -151,7 +151,6 @@ def _make_server(
 ) -> InferenceServer:
     """Construct an InferenceServer with shared-expert pinning."""
     dmap = DeviceMap.cpu_only()
-    dmap.hidden_dim = hidden_dim
 
     server = InferenceServer(
         node_id=node_id,
@@ -182,7 +181,6 @@ def run_phase1(seq_len: int, hidden_dim: int) -> None:
 
     # ── Build engine ─────────────────────────────────────────────────────
     dmap = DeviceMap.cpu_only()
-    dmap.hidden_dim = hidden_dim
     engine = HeterogeneousEngine.from_device_map(dmap)
 
     # Pin shared experts 0 & 1
