@@ -189,7 +189,7 @@ class TestDetectMLAFormat:
 
 class TestWeightLoaderMLA:
     def test_loads_mla_weights_into_engine(self, mla_checkpoint: Path):
-        engine = HeterogeneousEngine(DeviceMap(hidden_dim=HDIM, num_layers=1))
+        engine = HeterogeneousEngine(DeviceMap(model_id="test-mla-load", attention_on_gpu=False, moe_on_cpu=True))
         loader = WeightLoader(mla_checkpoint, layer_start=0, layer_end=1, verify_integrity=False)
         loader.load_into(engine)
 
@@ -200,7 +200,7 @@ class TestWeightLoaderMLA:
         assert mw.kv_a_proj.shape[1] == HDIM
 
     def test_mla_layer_count(self, mla_checkpoint: Path):
-        engine = HeterogeneousEngine(DeviceMap(hidden_dim=HDIM, num_layers=1))
+        engine = HeterogeneousEngine(DeviceMap(model_id="test-mla-count", attention_on_gpu=False, moe_on_cpu=True))
         loader = WeightLoader(mla_checkpoint, layer_start=0, layer_end=1, verify_integrity=False)
         loaded = loader.load_into(engine)
         assert loaded == 1
@@ -212,7 +212,7 @@ class TestWeightLoaderMLA:
 
 class TestWeightLoaderLegacy:
     def test_legacy_loads_q_k_v_o_norm(self, legacy_checkpoint: Path):
-        engine = HeterogeneousEngine(DeviceMap(hidden_dim=HDIM, num_layers=1))
+        engine = HeterogeneousEngine(DeviceMap(model_id="test-legacy", attention_on_gpu=False, moe_on_cpu=True))
         loader = WeightLoader(legacy_checkpoint, layer_start=0, layer_end=1, verify_integrity=False)
         loaded = loader.load_into(engine)
         assert loaded == 1
@@ -228,8 +228,8 @@ class TestMLATensorMap:
     def test_map_has_8_keys(self):
         assert len(_MLA_ATTN_TENSORS) == 8
 
-    def test_legacy_map_has_5_keys(self):
-        assert len(_LEGACY_ATTN_SUFFIXES) == 5
+    def test_legacy_map_has_8_keys(self):
+        assert len(_LEGACY_ATTN_SUFFIXES) == 8
 
     def test_mapping_includes_q_layernorm(self):
         assert _MLA_ATTN_TENSORS["self_attn.q_a_layernorm.weight"] == "q_norm"
@@ -289,12 +289,9 @@ class TestHeterogeneousEngineMLAForward:
     @pytest.fixture
     def engine_with_mla(self, mla_tensors: Dict[str, np.ndarray]) -> HeterogeneousEngine:
         engine = HeterogeneousEngine(DeviceMap(
+            model_id="test-mla-forward",
             attention_on_gpu=False,
             moe_on_cpu=True,
-            hidden_dim=HDIM,
-            num_layers=1,
-            num_heads=N_HEADS,
-            head_dim=HEAD_DIM,
         ))
         mw = MLAWeights(
             layer_idx=0,

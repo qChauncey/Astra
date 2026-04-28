@@ -13,13 +13,12 @@ from astra.network.dht import AstraDHT, DHTNodeRecord, _GlobalStore
 from astra.network.orchestrator import PipelineConfig, PipelineOrchestrator
 from astra.rpc.server import InferenceServer
 
-HIDDEN = 64
+HIDDEN = 128
 PORT_BASE = 50300
 
 
 def _start_server(node_id: str, port: int, ls: int, le: int) -> InferenceServer:
-    dmap = DeviceMap.cpu_only()
-    dmap.hidden_dim = HIDDEN
+    dmap = DeviceMap.cpu_only(model_id="test-orch")
     s = InferenceServer(node_id=node_id, layer_start=ls, layer_end=le,
                         port=port, geo_region="local", device_map=dmap)
     threading.Thread(target=s.start, daemon=True).start()

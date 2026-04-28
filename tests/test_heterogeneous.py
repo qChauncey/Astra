@@ -22,9 +22,44 @@ from astra.inference.heterogeneous import (
     HeterogeneousEngine,
     KTransformersStub,
     LayerKVCache,
+    GQAWeights,
 )
 from astra.inference.shared_expert_cache import ExpertWeights
 from astra.serialization.tensor_pack import TensorPacket
+from astra.config.model_config import register_model_config, ModelConfig, AttentionType
+
+
+# ────────────────────────────────────────────────────────────────── #
+# Register a small test model config                                     #
+# ────────────────────────────────────────────────────────────────── #
+
+from astra.config.model_config import QuantizationType
+
+register_model_config(
+    ModelConfig(
+        model_id="test-small",
+        display_name="Test Small",
+        arch_type="TestForCausalLM",
+        model_type="test",
+        hidden_dim=64,
+        num_layers=4,
+        head_dim=16,
+        num_attention_heads=4,
+        num_key_value_heads=4,
+        intermediate_size=256,
+        vocab_size=1024,
+        max_position_embeddings=2048,
+        rope_theta=10000.0,
+        rotary_dim=16,
+        rms_norm_eps=1e-6,
+        attention_type=AttentionType.GQA,
+        num_local_experts=8,
+        num_experts_per_tok=2,
+        num_shared_experts=2,
+        scoring_func="softmax",
+        native_quant=QuantizationType.FP16,
+    )
+)
 
 
 # ────────────────────────────────────────────────────────────────── #
@@ -40,11 +75,7 @@ def dmap():
     return DeviceMap(
         attention_on_gpu=False,  # CPU-only for CI
         moe_on_cpu=True,
-        hidden_dim=HIDDEN,
-        num_layers=4,
-        num_heads=4,
-        num_kv_heads=4,
-        head_dim=16,
+        model_id="test-small",
     )
 
 
@@ -187,11 +218,7 @@ class TestHeterogeneousEngine:
         dmap_with_attn = DeviceMap(
             attention_on_gpu=True,
             moe_on_cpu=True,
-            hidden_dim=HIDDEN,
-            num_layers=4,
-            num_heads=4,
-            num_kv_heads=4,
-            head_dim=16,
+            model_id="test-small",
         )
         eng = HeterogeneousEngine(device_map=dmap_with_attn)
         eng.forward(packet, layer_indices=[0], use_kv_cache=True)

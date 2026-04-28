@@ -40,7 +40,7 @@ HIDDEN = 64
 
 
 def _make_engine(hidden: int = HIDDEN) -> HeterogeneousEngine:
-    dmap = DeviceMap(attention_on_gpu=False, moe_on_cpu=True, hidden_dim=hidden)
+    dmap = DeviceMap(attention_on_gpu=False, moe_on_cpu=True, model_id="test-small")
     return HeterogeneousEngine(device_map=dmap)
 
 

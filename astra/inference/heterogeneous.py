@@ -52,10 +52,11 @@ from typing import Dict, List, Optional
 
 import numpy as np
 
-from ..serialization.tensor_pack import (
-    DEEPSEEK_V4_HIDDEN_DIM,
-    DEEPSEEK_V4_NUM_LAYERS,
-    TensorPacket,
+from ..serialization.tensor_pack import TensorPacket
+from ..config.model_config import (
+    get_model_config,
+    ModelConfig,
+    AttentionType,
 )
 from .differential_privacy import LayerDPInjector
 from .shared_expert_cache import ExpertWeights, SharedExpertCache
@@ -107,6 +108,54 @@ class MLAWeights:
     @property
     def kv_lora_rank(self) -> int:
         return self.kv_norm.shape[0]
+
+
+# ------------------------------------------------------------------ #
+# GQA weight container                                                   #
+# ------------------------------------------------------------------ #
+
+@dataclass
+class GQAWeights:
+    """
+    Grouped Query Attention weight matrices.
+
+    Used by MiniMax-M2.x, Qwen2, Llama-3, and others.  GQA uses fewer
+    key/value heads than query heads to reduce KV-cache memory.
+
+    Example (MiniMax-M2.5):
+      q_proj:  (hidden_dim, num_heads * head_dim)      = (3072, 6144)
+      k_proj:  (hidden_dim, num_kv_heads * head_dim)   = (3072, 1024)
+      v_proj:  (hidden_dim, num_kv_heads * head_dim)   = (3072, 1024)
+      o_proj:  (num_heads * head_dim, hidden_dim)      = (6144, 3072)
+      attn_norm: (hidden_dim,)                         = (3072,)
+      pre_attn_norm: (hidden_dim,) or None  (dual-norm MiniMax-M2.x)
+      post_attn_norm: (hidden_dim,) or None
+      qk_norm:  (head_dim,) or None          (per-layer QK norm)
+    """
+
+    layer_idx: int
+    q_proj: np.ndarray
+    k_proj: np.ndarray
+    v_proj: np.ndarray
+    o_proj: np.ndarray
+    attn_norm: np.ndarray
+    pre_attn_norm: Optional[np.ndarray] = None
+    post_attn_norm: Optional[np.ndarray] = None
+    qk_norm: Optional[np.ndarray] = None
+
+    # Derived dimensions (set on first use)
+    num_heads: int = 48
+    num_kv_heads: int = 8
+    head_dim: int = 128
+
+    @property
+    def hidden_dim(self) -> int:
+        return self.attn_norm.shape[0]
+
+    @property
+    def n_head_repeats(self) -> int:
+        """Number of query heads per KV head group."""
+        return self.num_heads // self.num_kv_heads
 
 
 # ------------------------------------------------------------------ #
@@ -399,34 +448,87 @@ class DeviceMap:
     """
     Specifies which sub-layers run on GPU vs CPU.
 
-    For a 16 GB GPU (e.g. RTX 5070 Ti) with DeepSeek-V4-Flash:
-      - All 61 attention sub-layers → GPU
-      - All 61 MoE FFN sub-layers   → CPU RAM (via KTransformers CPU offload)
+    All model-specific defaults (num_layers, hidden_dim, attention heads)
+    are sourced from ``astra.config.model_config`` via *model_id*.
+
+    Parameters
+    ----------
+    model_id : str or None
+        Registered model identifier.  Defaults to ``DEFAULT_MODEL``
+        (MiniMax-M2.5).
     """
     attention_on_gpu: bool = True
     moe_on_cpu: bool = True
     gpu_device: str = "cuda:0"   # ignored in stub mode
-    num_layers: int = DEEPSEEK_V4_NUM_LAYERS
-    hidden_dim: int = DEEPSEEK_V4_HIDDEN_DIM
+    model_id: Optional[str] = None
 
-    # Attention head configuration
-    num_heads: int = 128
-    num_kv_heads: int = 128      # MLA uses latent compression in practice
-    head_dim: int = 128
+    # Attention head configuration (resolved from model config)
+    num_heads: Optional[int] = None
+    num_kv_heads: Optional[int] = None
+    head_dim: Optional[int] = None
+
+    def __post_init__(self) -> None:
+        try:
+            cfg = get_model_config(self.model_id)
+        except KeyError:
+            # Test or non-registered model IDs are allowed
+            cfg = None
+        object.__setattr__(self, "_cfg", cfg)
+        if cfg is not None:
+            if self.num_heads is None:
+                object.__setattr__(self, "num_heads", cfg.num_attention_heads)
+            if self.num_kv_heads is None:
+                object.__setattr__(self, "num_kv_heads", cfg.num_key_value_heads)
+            if self.head_dim is None:
+                object.__setattr__(self, "head_dim", cfg.head_dim)
+        else:
+            # Fallback defaults for unknown models
+            if self.num_heads is None:
+                object.__setattr__(self, "num_heads", 48)
+            if self.num_kv_heads is None:
+                object.__setattr__(self, "num_kv_heads", 8)
+            if self.head_dim is None:
+                object.__setattr__(self, "head_dim", 128)
+
+    @property
+    def num_layers(self) -> int:
+        if self._cfg is None:
+            return 4  # test default
+        return self._cfg.num_layers  # type: ignore[attr-defined]
+
+    @property
+    def hidden_dim(self) -> int:
+        if self._cfg is None:
+            return 128  # test default
+        return self._cfg.hidden_dim  # type: ignore[attr-defined]
+
+    @property
+    def attention_type(self) -> AttentionType:
+        if self._cfg is None:
+            return AttentionType.GQA  # test default
+        return self._cfg.attention_type  # type: ignore[attr-defined]
+
+    @property
+    def num_experts(self) -> int:
+        if self._cfg is None:
+            return 8  # test default
+        return self._cfg.num_local_experts  # type: ignore[attr-defined]
+
+    @property
+    def num_shared_experts(self) -> int:
+        if self._cfg is None:
+            return 2  # test default
+        return self._cfg.num_shared_experts  # type: ignore[attr-defined]
 
     @classmethod
-    def for_16gb_gpu(cls) -> "DeviceMap":
+    def for_16gb_gpu(cls, model_id: Optional[str] = None) -> "DeviceMap":
         """Recommended config for an RTX 4090 / 5070 Ti class GPU."""
-        return cls(
-            attention_on_gpu=True,
-            moe_on_cpu=True,
-            num_layers=DEEPSEEK_V4_NUM_LAYERS,
-        )
+        return cls(attention_on_gpu=True, moe_on_cpu=True, model_id=model_id)
 
     @classmethod
-    def cpu_only(cls) -> "DeviceMap":
+    def cpu_only(cls, model_id: Optional[str] = None) -> "DeviceMap":
         """All computation on CPU — useful for testing without GPU."""
-        return cls(attention_on_gpu=False, moe_on_cpu=True)
+        return cls(attention_on_gpu=False, moe_on_cpu=True, model_id=model_id)
 
 
 # ------------------------------------------------------------------ #
@@ -497,6 +599,10 @@ class HeterogeneousEngine:
         self._mla_weights: Dict[int, MLAWeights] = {}
         self._mla_mode: bool = False
 
+        # GQA (Grouped Query Attention) weight store — Phase 5
+        self._gqa_weights: Dict[int, GQAWeights] = {}
+        self._gqa_mode: bool = False
+
     @classmethod
     def from_device_map(cls, dmap: DeviceMap) -> "HeterogeneousEngine":
         return cls(device_map=dmap)
@@ -520,9 +626,19 @@ class HeterogeneousEngine:
             self._mla_weights[mw.layer_idx] = mw
         self._mla_mode = True
 
+    def load_gqa_weights(self, weights: List[GQAWeights]) -> None:
+        """Register GQA weight matrices for each layer and activate GQA mode."""
+        for gw in weights:
+            self._gqa_weights[gw.layer_idx] = gw
+        self._gqa_mode = True
+
     def enable_mla_mode(self) -> None:
         """Activate MLA attention path (called by WeightLoader after loading MLA weights)."""
         self._mla_mode = True
+
+    def enable_gqa_mode(self) -> None:
+        """Activate GQA attention path (called by WeightLoader after loading GQA weights)."""
+        self._gqa_mode = True
 
     def _get_attn_weights(self, layer_idx: int) -> tuple:
         """Lazily initialise mock attention projection weights."""
@@ -567,6 +683,11 @@ class HeterogeneousEngine:
         """
         if self._mla_mode and layer_idx in self._mla_weights:
             return self._mla_attention_forward(
+                hidden, layer_idx, position_ids, use_kv_cache
+            )
+
+        if self._gqa_mode and layer_idx in self._gqa_weights:
+            return self._gqa_attention_forward(
                 hidden, layer_idx, position_ids, use_kv_cache
             )
 
@@ -691,6 +812,113 @@ class HeterogeneousEngine:
         d = int(mw.attn_norm.shape[0])
         self._gpu_flops_total += (
             d * d * seq_len * 2       # low-rank + output projections
+            + d * seq_len * seq_len    # attention scores
+            + d * d * seq_len * 1      # output projection
+        )
+        self._gpu_kernel_count += 1
+
+        return (hidden.astype(np.float32) + out).astype(hidden.dtype)
+
+    def _gqa_attention_forward(
+        self,
+        hidden: np.ndarray,
+        layer_idx: int,
+        position_ids: Optional[np.ndarray] = None,
+        use_kv_cache: bool = True,
+    ) -> np.ndarray:
+        """GQA attention sub-layer for MiniMax-M2.x / Qwen2 / Llama-3 style.
+
+        Uses fewer key/value heads than query heads.  The KV heads are
+        repeated (broadcast) to match the number of query heads before
+        the attention op.  Reshaping follows:
+
+          Q: (seq, num_heads * head_dim) → (seq, num_heads, head_dim)
+          K: (seq, num_kv_heads * head_dim) → (seq, num_kv_heads, head_dim)
+                                               → repeat_interleave → (seq, num_heads, head_dim)
+          V: same as K
+        """
+        gw = self._gqa_weights[layer_idx]
+        seq_len = hidden.shape[0]
+        n_heads = gw.num_heads
+        n_kv_heads = gw.num_kv_heads
+        head_dim = gw.head_dim
+        n_repeats = gw.n_head_repeats
+
+        # --- Pre-attention layernorm (MiniMax-M2.x dual-norm style) ---
+        if gw.pre_attn_norm is not None:
+            hidden = self._kt.rms_layer_norm(hidden, gw.pre_attn_norm)
+
+        # --- RMSNorm before attention ---
+        normed = self._kt.rms_layer_norm(hidden, gw.attn_norm)
+
+        if position_ids is None:
+            position_ids = np.arange(seq_len)
+
+        # --- Project Q, K, V ---
+        q = self._kt.matrix_multiply(normed, gw.q_proj.T)  # (seq, num_heads*head_dim)
+        k = self._kt.matrix_multiply(normed, gw.k_proj.T)  # (seq, num_kv_heads*head_dim)
+        v = self._kt.matrix_multiply(normed, gw.v_proj.T)  # (seq, num_kv_heads*head_dim)
+
+        # --- RoPE ---
+        q = self._kt.rope_embedding(q.astype(np.float16), position_ids)
+        k = self._kt.rope_embedding(k.astype(np.float16), position_ids)
+
+        # --- QK normalization (per-head, if present) ---
+        if gw.qk_norm is not None:
+            # Reshape q, k to per-head then apply norm
+            q_reshaped = q.reshape(seq_len, n_heads, head_dim)
+            q_normed = self._kt.rms_layer_norm(q_reshaped, gw.qk_norm)
+            q = q_normed.reshape(seq_len, n_heads * head_dim)
+
+            k_reshaped = k.reshape(seq_len, n_kv_heads, head_dim)
+            k_normed = self._kt.rms_layer_norm(k_reshaped, gw.qk_norm)
+            k = k_normed.reshape(seq_len, n_kv_heads * head_dim)
+
+        # --- KV cache ---
+        if use_kv_cache:
+            cache = self._kv_cache.setdefault(layer_idx, LayerKVCache())
+            cache.append(k.astype(np.float32), v)
+            k_full = cache.k.astype(np.float16)
+            v_full = cache.v
+        else:
+            k_full, v_full = k, v
+
+        cached_seq = k_full.shape[0]
+
+        # --- Reshape for attention: (seq, n_heads, head_dim) ---
+        q_sda = q.reshape(seq_len, n_heads, head_dim)
+        k_sda = k_full.reshape(cached_seq, n_kv_heads, head_dim)
+        v_sda = v_full.reshape(cached_seq, n_kv_heads, head_dim)
+
+        # --- Repeat KV heads to match Q heads (GQA broadcast) ---
+        k_broadcast = np.repeat(k_sda, n_repeats, axis=1)  # (cached_seq, n_heads, head_dim)
+        v_broadcast = np.repeat(v_sda, n_repeats, axis=1)  # (cached_seq, n_heads, head_dim)
+
+        # --- Flatten back to (seq, n_heads*head_dim) for KTransformers MLA kernel ---
+        k_flat = k_broadcast.reshape(cached_seq, n_heads * head_dim)
+        v_flat = v_broadcast.reshape(cached_seq, n_heads * head_dim)
+
+        # --- Scaled dot-product attention ---
+        attn_out = self._kt.multi_latent_attention(
+            q_sda.reshape(seq_len, n_heads * head_dim)[np.newaxis],
+            k_flat[np.newaxis],
+            v_flat[np.newaxis],
+            head_dim=head_dim,
+        )[0]
+
+        # --- Output projection ---
+        out = self._kt.matrix_multiply(
+            attn_out.astype(np.float32), gw.o_proj.T.astype(np.float32)
+        )
+
+        # --- Post-attention layernorm (MiniMax-M2.x dual-norm style) ---
+        if gw.post_attn_norm is not None:
+            out = self._kt.rms_layer_norm(out, gw.post_attn_norm)
+
+        # Track GPU flops
+        d = gw.hidden_dim
+        self._gpu_flops_total += (
+            d * d * seq_len * 2       # projections
             + d * seq_len * seq_len    # attention scores
             + d * d * seq_len * 1      # output projection
         )
