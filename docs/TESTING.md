@@ -15,7 +15,7 @@ python -m pytest tests/ -v
 
 | 测试文件 | 覆盖范围 | 测试数 |
 |---------|---------|--------|
-| `test_serialization.py` | TensorPacket 序列化往返、边界情况、CRC 校验 | 14 |
+| `test_serialization.py` | TensorPacket 序列化往返、边界情况、CRC 校验 | 15 |
 | `test_shared_expert_cache.py` | LRU 淘汰、固定策略、SiLU FFN 前向计算 | 11 |
 | `test_geo_router.py` | Haversine 距离、门控输出形状、地理最近节点分发 | 14 |
 | `test_dht.py` | TTL 过期、订阅回调、节点注销、专家/层查询 | 14 |
