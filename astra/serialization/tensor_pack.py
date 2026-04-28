@@ -13,9 +13,10 @@
 # limitations under the License.
 #
 # MODIFICATIONS (Astra project):
-#   - Designed from scratch for DeepSeek-V4 token-level distribution.
+#   - Designed from scratch for model-agnostic token-level distribution.
 #   - Supports KTransformers-compatible float16/bfloat16 wire format.
 #   - Adds geographic routing metadata fields for micro-cluster dispatch.
+#   - Model constants are now sourced from astra.config.model_config.
 
 """
 Task A: Tensor serialization and packaging for token-level P2P distribution.
@@ -44,18 +45,23 @@ from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 
+from astra.config.model_config import get_model_config, ModelConfig
+
 _MAGIC = b"ASTR"
 _VERSION = 1
 _HEADER_STRUCT = struct.Struct("<4sI")   # magic(4) + version(4)
 _LEN4 = struct.Struct("<I")
 _LEN8 = struct.Struct("<Q")
 
-# DeepSeek-V4-Flash constants (284B model)
-DEEPSEEK_V4_NUM_LAYERS = 61
-DEEPSEEK_V4_HIDDEN_DIM = 7168
-DEEPSEEK_V4_NUM_EXPERTS = 256
-DEEPSEEK_V4_TOP_K_EXPERTS = 8
-DEEPSEEK_V4_SHARED_EXPERTS = 2
+# Backward-compatible aliases (deprecated — use get_model_config() instead)
+def _get_default_cfg() -> ModelConfig:
+    return get_model_config()
+
+DEEPSEEK_V4_NUM_LAYERS = _get_default_cfg().num_layers
+DEEPSEEK_V4_HIDDEN_DIM = _get_default_cfg().hidden_dim
+DEEPSEEK_V4_NUM_EXPERTS = _get_default_cfg().num_local_experts
+DEEPSEEK_V4_TOP_K_EXPERTS = _get_default_cfg().num_experts_per_tok
+DEEPSEEK_V4_SHARED_EXPERTS = _get_default_cfg().num_shared_experts
 
 
 @dataclass
@@ -123,12 +129,21 @@ class TensorPacket:
     def make_input(
         cls,
         token_ids: List[int],
-        hidden_dim: int = DEEPSEEK_V4_HIDDEN_DIM,
+        hidden_dim: Optional[int] = None,
+        model_id: Optional[str] = None,
         dtype: np.dtype = np.float16,
         geo_region: str = "default",
         src_node: str = "",
     ) -> "TensorPacket":
-        """Create an initial embedding-level packet from raw token IDs."""
+        """Create an initial embedding-level packet from raw token IDs.
+
+        If *hidden_dim* is not provided, it is resolved from the current
+        default model configuration (see ``astra.config.model_config``).
+
+        *model_id* can be used to override the default model.
+        """
+        if hidden_dim is None:
+            hidden_dim = get_model_config(model_id).hidden_dim
         seq_len = len(token_ids)
         # In production: embed tokens via embedding table.  Here we use zeros
         # as a stand-in that keeps the tensor shape contract intact.

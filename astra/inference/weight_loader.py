@@ -15,11 +15,11 @@
 """
 Weight loader for HeterogeneousEngine — Phase 4.
 
-Loads DeepSeek safetensors checkpoints into HeterogeneousEngine weight slots.
+Loads safetensors checkpoints into HeterogeneousEngine weight slots.
 Only layers in [layer_start, layer_end) are loaded; unneeded shards are
 never read.
 
-Supports two attention formats:
+Supports three attention formats via auto-detection:
 
   Standard MHA (legacy, DeepSeek-V2):
     model.layers.{i}.self_attn.q_proj.weight
@@ -28,7 +28,7 @@ Supports two attention formats:
     model.layers.{i}.self_attn.o_proj.weight
     model.layers.{i}.input_layernorm.weight
 
-  Multi-head Latent Attention (MLA, DeepSeek-V3 / V4):
+  Multi-head Latent Attention (MLA, DeepSeek-V3 / V4 / R1):
     model.layers.{i}.self_attn.q_a_proj.weight
     model.layers.{i}.self_attn.q_b_proj.weight
     model.layers.{i}.self_attn.kv_a_proj_with_mqa.weight
@@ -38,13 +38,25 @@ Supports two attention formats:
     model.layers.{i}.self_attn.kv_a_layernorm.weight
     model.layers.{i}.input_layernorm.weight
 
-Auto-detection:  if any index entry contains ``q_a_proj`` the loader
-sets ``self._mla_mode = True`` and routes tensors to
-``engine._mla_weights[layer_idx]`` (MLAWeights dataclass).  Otherwise
-the legacy 5-projection path is used.
+  Grouped Query Attention (GQA, MiniMax-M2.x / Qwen2 / Llama-3):
+    model.layers.{i}.self_attn.q_proj.weight
+    model.layers.{i}.self_attn.k_proj.weight
+    model.layers.{i}.self_attn.v_proj.weight
+    model.layers.{i}.self_attn.o_proj.weight
+    model.layers.{i}.input_layernorm.weight
+    model.layers.{i}.pre_attention_layernorm.weight   (MiniMax-M2.x)
+    model.layers.{i}.post_attention_layernorm.weight  (MiniMax-M2.x)
+    model.layers.{i}.qk_norm.weight                   (MiniMax-M2.x, if use_qk_norm)
+
+Detection priority:
+  1. Check safetensors index / shard for ``q_a_proj`` → MLA mode.
+  2. Check safetensors index for ``pre_attention_layernorm`` → GQA mode
+     (MiniMax-M2.x style dual-norm attention).
+  3. Otherwise legacy MHA mode (works for both legacy DeepSeek-V2 MHA
+     and standard GQA models that only use 5 core projections).
 
 MoE FFN (shared experts and routed experts) tensor names are shared
-across both formats:
+across all formats:
 
   model.layers.{i}.mlp.experts.{j}.gate_proj.weight
   model.layers.{i}.mlp.experts.{j}.up_proj.weight
@@ -53,21 +65,30 @@ across both formats:
   model.layers.{i}.mlp.shared_experts.up_proj.weight
   model.layers.{i}.mlp.shared_experts.down_proj.weight
 
+For GQA models (MiniMax-M2.x), attention loading respects the model's
+native hidden_dim (3072) rather than using DeepSeek-style shape fitting.
+Tensors are loaded as-is and stored in the engine's GQA slot.
+
 Memory-mapped weight access (mmap):
   MmapWeightStore maps safetensors shard files directly into virtual
-  memory using numpy's memmap-like interface.  This allows the 580 GB
-  DeepSeek-V4 checkpoint to sit on NVMe without being fully read into
-  RAM.  The store maintains an LRU cache of open shard file handles.
+  memory using numpy's memmap-like interface.  This allows large
+  checkpoints (580 GB+ DeepSeek-V4 or 126 GB MiniMax-M2.5) to sit on
+  NVMe without being fully read into RAM.  The store maintains an LRU
+  cache of open shard file handles.
 
 Usage::
 
+    # MLA model (DeepSeek-V4)
     loader = WeightLoader("/data/deepseek-v4", layer_start=0, layer_end=20)
-    loader.load_into(engine)           # loads all weights for layers 0-19
-    loader.load_experts(engine, [0, 1])  # load only expert IDs 0 and 1
+    loader.load_into(engine)
+
+    # GQA model (MiniMax-M2.5)
+    loader = WeightLoader("/data/minimax-m2.5", layer_start=0, layer_end=30)
+    loader.load_into(engine)
 
     # mmap mode - zero-copy tensor access for NVMe-hosted checkpoints
-    store = MmapWeightStore("/data/deepseek-v4")
-    w = store.get_tensor("model.layers.0.self_attn.q_a_proj.weight")
+    store = MmapWeightStore("/data/minimax-m2.5")
+    w = store.get_tensor("model.layers.0.self_attn.q_proj.weight")
     w_read_once = store.get_tensor_read_once(shard_path, name)
 """
 
@@ -88,22 +109,34 @@ import numpy as np
 
 log = logging.getLogger("astra.weight_loader")
 
-# DeepSeek-V4-Flash published HuggingFace repository name
-DEEPSEEK_V4_HF_REPO = "deepseek-ai/DeepSeek-V2"
+# ------------------------------------------------------------------ #
+# Attention format constants                                          #
+# ------------------------------------------------------------------ #
+
+class AttentionFormat:
+    """Enumeration of supported attention formats."""
+    LEGACY = "legacy"   # Standard MHA (DeepSeek-V2) or basic GQA
+    MLA = "mla"          # Multi-head Latent Attention (DeepSeek-V3/V4)
+    GQA = "gqa"          # Grouped Query Attention (MiniMax-M2, Qwen2, Llama-3)
+
 
 # ------------------------------------------------------------------ #
-# Legacy MHA attention weight keys                                    #
+# Legacy MHA / GQA attention weight keys                               #
 # ------------------------------------------------------------------ #
-_LEGACY_ATTN_SUFFIXES = [
+_GQA_ATTN_SUFFIXES = [
     "self_attn.q_proj.weight",
     "self_attn.k_proj.weight",
     "self_attn.v_proj.weight",
     "self_attn.o_proj.weight",
     "input_layernorm.weight",
+    "pre_attention_layernorm.weight",
+    "post_attention_layernorm.weight",
+    "qk_norm.weight",
 ]
 
-# Legacy alias for backward compatibility
-_ATTN_SUFFIXES = _LEGACY_ATTN_SUFFIXES
+# Aliases for backward compatibility
+_ATTN_SUFFIXES = _GQA_ATTN_SUFFIXES
+_LEGACY_ATTN_SUFFIXES = _GQA_ATTN_SUFFIXES
 
 # ------------------------------------------------------------------ #
 # MLA (Multi-head Latent Attention) tensor name mapping                #
@@ -123,18 +156,47 @@ _MLA_ATTN_TENSORS: Dict[str, str] = {
 # Public alias for external consumers (tests, engine)
 MLA_TENSOR_MAP = _MLA_ATTN_TENSORS
 
-# Expert weight keys
+# ------------------------------------------------------------------ #
+# GQA (Grouped Query Attention) tensor name mapping                    #
+# ------------------------------------------------------------------ #
+# Each entry:  safetensors suffix -> GQAWeights dataclass field name.
+_GQA_ATTN_TENSORS: Dict[str, str] = {
+    "self_attn.q_proj.weight":               "q_proj",
+    "self_attn.k_proj.weight":               "k_proj",
+    "self_attn.v_proj.weight":               "v_proj",
+    "self_attn.o_proj.weight":               "o_proj",
+    "input_layernorm.weight":                "attn_norm",
+    "pre_attention_layernorm.weight":        "pre_attn_norm",
+    "post_attention_layernorm.weight":       "post_attn_norm",
+    "qk_norm.weight":                        "qk_norm",
+}
+
+# Public alias
+GQA_TENSOR_MAP = _GQA_ATTN_TENSORS
+
+# Expert weight keys (standard format: mlp.experts.{id}.{proj}.weight)
 _EXPERT_SUFFIXES = [
     "gate_proj.weight",
     "up_proj.weight",
     "down_proj.weight",
 ]
 
+# Expert weight keys for MiniMax-M2.x block_sparse_moe format.
+# Mapping:  w1 → gate_proj, w2 → up_proj, w3 → down_proj
+_MINIMAX_MOE_EXPERT_SUFFIXES: Dict[str, str] = {
+    "w1.weight": "gate_proj",
+    "w2.weight": "up_proj",
+    "w3.weight": "down_proj",
+}
+_MINIMAX_MOE_EXPERT_TENSORS: List[str] = list(_MINIMAX_MOE_EXPERT_SUFFIXES.keys())
+
 # Safetensors dtype byte -> numpy dtype
 _DTYPE_MAP = {
     "F32": np.float32,
     "F16": np.float16,
     "BF16": np.dtype(np.uint16),  # raw bytes - consumer casts to float32
+    "F8_E4M3": np.dtype(np.uint8),  # raw bytes - FP8 (1 byte/elem, MiniMax-M2.x)
+    "F8_E5M2": np.dtype(np.uint8),  # raw bytes - FP8 alt format
     "I32": np.int32,
     "I64": np.int64,
     "F64": np.float64,
@@ -142,15 +204,32 @@ _DTYPE_MAP = {
 }
 
 
-def detect_mla_format(model_dir: str | pathlib.Path) -> bool:
-    """Return True if the model directory contains MLA-formatted tensors.
+def detect_attention_format(model_dir: str | pathlib.Path) -> str:
+    """Detect the attention format of a checkpoint directory.
 
-    Probes ``model.safetensors.index.json`` for any tensor name whose
-    attention suffix contains ``q_a_proj`` (the MLA encoder projection).
-    Falls back to scanning the first shard file header if no index exists.
+    Probes ``model.safetensors.index.json`` (or first safetensors shard)
+    for distinctive tensor name patterns.
+
+    Returns
+    -------
+    str
+        One of ``"mla"``, ``"gqa"``, or ``"legacy"``.
     """
     model_dir = pathlib.Path(model_dir)
     index_path = model_dir / "model.safetensors.index.json"
+
+    # Also check config.json for model_type hint
+    config_path = model_dir / "config.json"
+    if config_path.is_file():
+        try:
+            with open(config_path) as f:
+                cfg = json.load(f)
+            model_type = cfg.get("model_type", "")
+            if model_type in ("minimax_m2",):
+                return AttentionFormat.GQA
+        except (json.JSONDecodeError, OSError):
+            pass
+
     if index_path.is_file():
         try:
             with open(index_path) as f:
@@ -158,7 +237,9 @@ def detect_mla_format(model_dir: str | pathlib.Path) -> bool:
             weight_map = data.get("weight_map", {})
             for name in weight_map:
                 if "q_a_proj" in name:
-                    return True
+                    return AttentionFormat.MLA
+                if "pre_attention_layernorm" in name:
+                    return AttentionFormat.GQA
         except (json.JSONDecodeError, OSError):
             pass
 
@@ -167,23 +248,35 @@ def detect_mla_format(model_dir: str | pathlib.Path) -> bool:
     if not shard.is_file():
         candidates = list(model_dir.glob("*.safetensors"))
         if not candidates:
-            return False
+            return AttentionFormat.LEGACY
         shard = candidates[0]
 
     try:
         with open(shard, "rb") as f:
             header_len_bytes = f.read(8)
             if len(header_len_bytes) < 8:
-                return False
+                return AttentionFormat.LEGACY
             header_len = struct.unpack("<Q", header_len_bytes)[0]
             header = json.loads(f.read(header_len).decode("utf-8"))
             for name in header:
-                if name != "__metadata__" and "q_a_proj" in name:
-                    return True
+                if name != "__metadata__":
+                    if "q_a_proj" in name:
+                        return AttentionFormat.MLA
+                    if "pre_attention_layernorm" in name:
+                        return AttentionFormat.GQA
     except (OSError, struct.error, json.JSONDecodeError):
         pass
 
-    return False
+    return AttentionFormat.LEGACY
+
+
+def detect_mla_format(model_dir: str | pathlib.Path) -> bool:
+    """Return True if the model directory contains MLA-formatted tensors.
+
+    Kept for backward compatibility.  Prefer ``detect_attention_format()``
+    for new code.
+    """
+    return detect_attention_format(model_dir) == AttentionFormat.MLA
 
 
 # ------------------------------------------------------------------ #
@@ -191,20 +284,37 @@ def detect_mla_format(model_dir: str | pathlib.Path) -> bool:
 # ------------------------------------------------------------------ #
 
 def _load_safetensors(path: pathlib.Path) -> Dict[str, np.ndarray]:
-    """Load a safetensors file into a dict of numpy arrays."""
-    try:
-        from safetensors import safe_open  # type: ignore[import]
-    except ImportError as exc:
-        raise ImportError(
-            "safetensors package required for weight loading. "
-            "Install with: pip install safetensors"
-        ) from exc
+    """Load a safetensors file into a dict of numpy arrays.
 
-    tensors: Dict[str, np.ndarray] = {}
-    with safe_open(str(path), framework="numpy") as f:
-        for key in f.keys():
-            tensors[key] = f.get_tensor(key)
-    return tensors
+    Reads tensor data directly from the file using header offsets, bypassing
+    the safetensors ``safe_open`` API entirely.  This avoids NumPy dtype
+    compatibility issues with bfloat16 (used by MiniMax-M2.5 and other
+    FP8-era checkpoints).  BF16 tensors are loaded as uint16 raw bytes;
+    downstream consumers cast to float32 as needed.
+    """
+    # We need the _original_ raw header bytes to compute the correct data
+    # offset — re-serialising the JSON may produce a different number of
+    # bytes than the on-disk representation.
+    with open(path, "rb") as f:
+        header_len = struct.unpack("<Q", f.read(8))[0]
+        raw_header_bytes = f.read(header_len)
+        data_offset = 8 + len(raw_header_bytes)
+        header = json.loads(raw_header_bytes.decode("utf-8"))
+
+        tensors: Dict[str, np.ndarray] = {}
+        for key, meta in header.items():
+            if key == "__metadata__":
+                continue
+            dtype_str = meta["dtype"]
+            shape = meta["shape"]
+            start, end = meta["data_offsets"]
+            byte_len = end - start
+            f.seek(data_offset + start)
+            raw = f.read(byte_len)
+            np_dtype = _DTYPE_MAP.get(dtype_str, np.float16)
+            arr = np.frombuffer(raw, dtype=np_dtype).reshape(shape)
+            tensors[key] = arr
+        return tensors
 
 
 def _parse_safetensors_header(path: pathlib.Path) -> Dict:
@@ -269,13 +379,17 @@ class ModelIndex:
 # ------------------------------------------------------------------ #
 
 class WeightLoader:
-    """Load DeepSeek checkpoint weights into a HeterogeneousEngine.
+    """Load safetensors checkpoint weights into a HeterogeneousEngine.
+
+    Auto-detects attention format (MLA, GQA, or legacy MHA) and dispatches
+    weight loading accordingly.
 
     Parameters
     ----------
     model_dir:    Path to local directory containing safetensors files.
     layer_start:  First layer index this node handles.
     layer_end:    One-past-last layer index this node handles.
+    verify_integrity:  If True, validate shards against manifest.
     """
 
     def __init__(
@@ -293,11 +407,23 @@ class WeightLoader:
         self._verify_integrity = verify_integrity
         self._manifest = self._load_manifest() if verify_integrity else None
         self._verified_shards: set[str] = set()
-        self._mla_mode = detect_mla_format(self._dir)
-        if self._mla_mode:
-            log.info("Detected MLA-format checkpoint in %s", self._dir)
-        else:
-            log.info("Using legacy MHA attention format for %s", self._dir)
+        self._attn_format = detect_attention_format(self._dir)
+        log.info("Detected attention format: %s for %s", self._attn_format, self._dir)
+
+    @property
+    def attention_format(self) -> str:
+        """The detected attention format: ``"mla"``, ``"gqa"``, or ``"legacy"``."""
+        return self._attn_format
+
+    @property
+    def is_mla(self) -> bool:
+        """True if the checkpoint uses Multi-head Latent Attention."""
+        return self._attn_format == AttentionFormat.MLA
+
+    @property
+    def is_gqa(self) -> bool:
+        """True if the checkpoint uses Grouped Query Attention."""
+        return self._attn_format == AttentionFormat.GQA
 
     def _load_manifest(self):
         """Load weight manifest if present. Returns None if not found."""
@@ -369,12 +495,18 @@ class WeightLoader:
     def load_into(self, engine) -> int:
         """Load attention weights + norms for layers in [layer_start, layer_end).
 
+        Dispatches to the correct loader based on detected attention format.
+
         Returns the number of layers successfully loaded.
         """
-        if self._mla_mode:
+        if self._attn_format == AttentionFormat.MLA:
             return self._load_mla_attention(engine)
+        elif self._attn_format == AttentionFormat.GQA:
+            return self._load_gqa_attention(engine)
         else:
             return self._load_legacy_attention(engine)
+
+    # -- Legacy attention loading ------------------------------------------
 
     def _load_legacy_attention(self, engine) -> int:
         """Load standard MHA attention weights (q, k, v, o, norm)."""
@@ -465,19 +597,107 @@ class WeightLoader:
             attn_norm=tensors["input_layernorm.weight"],
         )
 
+    # -- GQA attention loading ---------------------------------------------
+
+    def _load_gqa_attention(self, engine) -> int:
+        """Load GQA attention weights for MiniMax-M2.x / Qwen2 / Llama-3 style.
+
+        Uses the engine's native hidden_dim from the model config (e.g. 3072
+        for MiniMax-M2.5) rather than legacy DeepSeek-style fitting.
+        """
+        from .heterogeneous import GQAWeights
+
+        loaded = 0
+        for i in range(self.layer_start, self.layer_end):
+            gqa_weights = self._load_gqa_attention_layer(i)
+            if gqa_weights is not None:
+                if not hasattr(engine, '_gqa_weights'):
+                    engine._gqa_weights = {}
+                engine._gqa_weights[i] = gqa_weights
+                loaded += 1
+            else:
+                log.debug("Layer %d: incomplete GQA weights, skipping", i)
+        log.info("Loaded GQA attention weights for %d / %d layers",
+                 loaded, self.layer_end - self.layer_start)
+        if loaded > 0:
+            engine.enable_gqa_mode()
+        return loaded
+
+    def _load_gqa_attention_layer(self, layer_idx: int) -> Optional[object]:
+        """Build GQAWeights for one layer from checkpoint tensors.
+
+        Tries to load all known GQA tensor suffixes.  Required tensors are
+        q_proj, k_proj, v_proj, o_proj, and input_layernorm.  Optional
+        tensors (pre/post_attention_layernorm, qk_norm) are loaded if present.
+
+        For MiniMax-M2.x FP8 checkpoints, companion ``weight_scale_inv``
+        tensors are applied to dequantise Q/K/V/O projection weights.
+        """
+        from .heterogeneous import GQAWeights
+
+        # Required tensors (raw FP8 for MiniMax-M2.x)
+        q = self._layer_tensor(layer_idx, "self_attn.q_proj.weight")
+        k = self._layer_tensor(layer_idx, "self_attn.k_proj.weight")
+        v = self._layer_tensor(layer_idx, "self_attn.v_proj.weight")
+        o = self._layer_tensor(layer_idx, "self_attn.o_proj.weight")
+        attn_norm = self._layer_tensor(layer_idx, "input_layernorm.weight")
+
+        if any(t is None for t in [q, k, v, o, attn_norm]):
+            log.debug("Layer %d: missing required GQA tensors", layer_idx)
+            return None
+
+        # FP8 dequant for Q/K/V/O projections (MiniMax-M2.x stores all
+        # weights in FP8 with per-tensor scale factors)
+        q = self._dequant_minimax(q, self._layer_tensor(
+            layer_idx, "self_attn.q_proj.weight_scale_inv"))
+        k = self._dequant_minimax(k, self._layer_tensor(
+            layer_idx, "self_attn.k_proj.weight_scale_inv"))
+        v = self._dequant_minimax(v, self._layer_tensor(
+            layer_idx, "self_attn.v_proj.weight_scale_inv"))
+        o = self._dequant_minimax(o, self._layer_tensor(
+            layer_idx, "self_attn.o_proj.weight_scale_inv"))
+        # RMS norm weights stay in float16 (no scale factor)
+
+        # Optional tensors (may not exist in all GQA models)
+        pre_attn_norm = self._layer_tensor(layer_idx, "pre_attention_layernorm.weight")
+        post_attn_norm = self._layer_tensor(layer_idx, "post_attention_layernorm.weight")
+        qk_norm = self._layer_tensor(layer_idx, "qk_norm.weight")
+
+        return GQAWeights(
+            layer_idx=layer_idx,
+            q_proj=q.astype(np.float16),
+            k_proj=k.astype(np.float16),
+            v_proj=v.astype(np.float16),
+            o_proj=o.astype(np.float16),
+            attn_norm=attn_norm.astype(np.float16),
+            pre_attn_norm=pre_attn_norm.astype(np.float16) if pre_attn_norm is not None else None,
+            post_attn_norm=post_attn_norm.astype(np.float16) if post_attn_norm is not None else None,
+            qk_norm=qk_norm.astype(np.float16) if qk_norm is not None else None,
+        )
+
     # -- Expert loading ----------------------------------------------------
 
     def load_experts(self, engine, expert_ids: List[int]) -> int:
         """Load MoE expert weights for all layers in [layer_start, layer_end).
 
+        Automatically detects between standard ``mlp.experts`` naming and
+        MiniMax-style ``block_sparse_moe.experts`` naming.  The first tensor
+        fetch attempt per layer determines which prefix is used for the
+        remainder of that layer.
+
+        For models with ``num_shared_experts == 0`` (e.g. MiniMax-M2.5),
+        shared expert IDs (0, 1) are treated as routed experts.
+
         Returns the count of (layer, expert) pairs successfully loaded.
         """
         loaded = 0
+        shared_count = engine._dmap.num_shared_experts
+
         for layer_idx in range(self.layer_start, self.layer_end):
             for eid in expert_ids:
                 ew = self._load_one_expert(layer_idx, eid)
                 if ew is not None:
-                    if eid < 2:
+                    if shared_count > 0 and eid < shared_count:
                         engine.load_shared_experts([ew])
                     else:
                         engine.load_expert(ew)
@@ -486,13 +706,38 @@ class WeightLoader:
         return loaded
 
     def _load_one_expert(self, layer_idx: int, expert_id: int) -> Optional[object]:
+        """Load one MoE expert's weights from safetensors.
+
+        Probes two naming conventions in order:
+          1. Standard:  ``mlp.experts.{id}.{gate_proj,up_proj,down_proj}.weight``
+          2. MiniMax:   ``block_sparse_moe.experts.{id}.{w1,w2,w3}.weight``
+             (with optional ``.weight_scale_inv`` suffix for FP8 dequant).
+
+        Returns ``ExpertWeights`` on success, or None if any required tensor
+        is missing.
+        """
         from .shared_expert_cache import ExpertWeights
 
-        prefix = "mlp.shared_experts" if expert_id < 2 else f"mlp.experts.{expert_id}"
+        # ---- Probe strategy ----
+        # First try MiniMax naming (block_sparse_moe.*.w1.weight).  If
+        # that tensor is present for this layer, use it.  Otherwise fall
+        # back to standard naming.
+        _minimax_probe = self._layer_tensor(
+            layer_idx, f"block_sparse_moe.experts.{expert_id}.w1.weight"
+        )
+        if _minimax_probe is not None:
+            return self._load_one_expert_minimax(layer_idx, expert_id)
 
-        gate = self._layer_tensor(layer_idx, f"{prefix}.gate_proj.weight")
-        up = self._layer_tensor(layer_idx, f"{prefix}.up_proj.weight")
-        down = self._layer_tensor(layer_idx, f"{prefix}.down_proj.weight")
+        # Standard naming
+        gate = self._layer_tensor(
+            layer_idx, f"mlp.experts.{expert_id}.gate_proj.weight"
+        )
+        up = self._layer_tensor(
+            layer_idx, f"mlp.experts.{expert_id}.up_proj.weight"
+        )
+        down = self._layer_tensor(
+            layer_idx, f"mlp.experts.{expert_id}.down_proj.weight"
+        )
 
         if any(t is None for t in [gate, up, down]):
             return None
@@ -503,6 +748,96 @@ class WeightLoader:
             up_proj=up.astype(np.float16),
             down_proj=down.astype(np.float16),
         )
+
+    def _load_one_expert_minimax(
+        self, layer_idx: int, expert_id: int
+    ) -> Optional[object]:
+        """Load one MoE expert from MiniMax-M2.x ``block_sparse_moe`` format.
+
+        Tensor mapping::
+
+            block_sparse_moe.experts.{j}.w1.weight → gate_proj
+            block_sparse_moe.experts.{j}.w2.weight → up_proj
+            block_sparse_moe.experts.{j}.w3.weight → down_proj
+
+        FP8 dequant is applied when a companion ``weight_scale_inv`` tensor
+        is present for each weight matrix.
+        """
+        from .shared_expert_cache import ExpertWeights
+
+        gate = self._layer_tensor(
+            layer_idx, f"block_sparse_moe.experts.{expert_id}.w1.weight"
+        )
+        up = self._layer_tensor(
+            layer_idx, f"block_sparse_moe.experts.{expert_id}.w2.weight"
+        )
+        down = self._layer_tensor(
+            layer_idx, f"block_sparse_moe.experts.{expert_id}.w3.weight"
+        )
+
+        if any(t is None for t in [gate, up, down]):
+            return None
+
+        # FP8 dequant: if weight_scale_inv exists, multiply through
+        gate = self._dequant_minimax(gate, self._layer_tensor(
+            layer_idx, f"block_sparse_moe.experts.{expert_id}.w1.weight_scale_inv"
+        ))
+        up = self._dequant_minimax(up, self._layer_tensor(
+            layer_idx, f"block_sparse_moe.experts.{expert_id}.w2.weight_scale_inv"
+        ))
+        down = self._dequant_minimax(down, self._layer_tensor(
+            layer_idx, f"block_sparse_moe.experts.{expert_id}.w3.weight_scale_inv"
+        ))
+
+        return ExpertWeights(
+            expert_id=expert_id,
+            gate_proj=gate.astype(np.float16),
+            up_proj=up.astype(np.float16),
+            down_proj=down.astype(np.float16),
+        )
+
+    @staticmethod
+    def _dequant_minimax(weight: np.ndarray, scale_inv: Optional[np.ndarray]) -> np.ndarray:
+        """Apply per-tensor or block-wise FP8 dequantisation.
+
+        MiniMax-M2.x stores all projection weights in FP8 (``F8_E4M3``)
+        with companion ``weight_scale_inv`` tensors.  Two modes exist:
+
+        * **Per-tensor**: ``scale_inv`` is a scalar or 1-d tensor —
+          ``weight * scale_inv`` element-wise.
+        * **Block-wise** (MiniMax-M2.5): ``scale_inv`` is a 2-d grid of
+          float32 scales, one per (128×128) block.  Each block is
+          multiplied by its corresponding scale value.
+
+        If *scale_inv* is None (no quantization factor present), returns
+        *weight* cast to float16 unchanged.
+        """
+        if scale_inv is None:
+            return weight.astype(np.float16)
+
+        w32 = weight.astype(np.float32)
+        s32 = scale_inv.astype(np.float32)
+
+        # Per-tensor: element-wise multiply
+        if s32.ndim <= 1:
+            return (w32 * s32).astype(np.float16)
+
+        # Block-wise: 2-d scale grid (r_blocks, c_blocks) for block size B×B
+        r, c = w32.shape
+        scale_r, scale_c = s32.shape
+        block_r = r // scale_r
+        block_c = c // scale_c
+
+        # Reshape into blocks:
+        #   (scale_r, block_r, scale_c, block_c)
+        #   -> transpose -> (scale_r, scale_c, block_r, block_c)
+        #   -> multiply scales -> transpose back -> reshape to (r, c)
+        w_blocks = w32.reshape(scale_r, block_r, scale_c, block_c)
+        w_blocks = w_blocks.transpose(0, 2, 1, 3)
+        w_blocks = w_blocks * s32[:, :, np.newaxis, np.newaxis]
+        w_blocks = w_blocks.transpose(0, 2, 1, 3).reshape(r, c)
+
+        return w_blocks.astype(np.float16)
 
     def list_available_layers(self) -> List[int]:
         """Return layer indices that have at least one weight shard on disk."""
@@ -609,7 +944,7 @@ class SafetensorsMmapReader:
         data_offset = 8 + len(header_bytes)
 
         # Open + mmap
-        fd = os.open(str(path), os.O_RDONLY | os.O_BINARY)
+        fd = os.open(str(path), os.O_RDONLY)
         try:
             file_size = os.fstat(fd).st_size
             mapping = mmap.mmap(fd, file_size, access=mmap.ACCESS_READ)
@@ -646,10 +981,10 @@ class SafetensorsMmapReader:
 class MmapWeightStore:
     """Memory-mapped weight store for large model checkpoints.
 
-    Maps safetensors shard files into virtual memory so that the 580 GB
-    DeepSeek-V4 checkpoint can reside on NVMe without being fully loaded
-    into RAM.  Maintains an LRU cache of open shard handles via an
-    underlying ``SafetensorsMmapReader``.
+    Maps safetensors shard files into virtual memory so that large
+    checkpoints (580 GB+ DeepSeek-V4 or 126 GB MiniMax-M2.5) can reside
+    on NVMe without being fully loaded into RAM.  Maintains an LRU cache
+    of open shard handles via an underlying ``SafetensorsMmapReader``.
 
     Parameters
     ----------
@@ -704,7 +1039,7 @@ class MmapWeightStore:
         header_bytes = json.dumps(header).encode("utf-8")
         data_offset = 8 + len(header_bytes)
 
-        fd = os.open(str(shard_path), os.O_RDONLY | os.O_BINARY)
+        fd = os.open(str(shard_path), os.O_RDONLY)
         try:
             file_size = os.fstat(fd).st_size
             mapping = mmap.mmap(fd, file_size, access=mmap.ACCESS_READ)

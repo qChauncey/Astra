@@ -70,8 +70,7 @@ def engine() -> HeterogeneousEngine:
     dmap = DeviceMap(
         attention_on_gpu=False,
         moe_on_cpu=True,
-        num_layers=4,
-        hidden_dim=64,
+        model_id="test-4layers",
     )
     return HeterogeneousEngine.from_device_map(dmap)
 

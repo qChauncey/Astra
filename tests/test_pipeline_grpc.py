@@ -20,13 +20,12 @@ from astra.rpc.server import InferenceServer
 from astra.serialization.tensor_pack import TensorPacket
 
 
-HIDDEN = 64
+HIDDEN = 128
 PORT_BASE = 50200   # offset to avoid conflicts with mock_pipeline.py
 
 
 def _make_server(node_id: str, port: int, ls: int, le: int) -> InferenceServer:
-    dmap = DeviceMap.cpu_only()
-    dmap.hidden_dim = HIDDEN
+    dmap = DeviceMap.cpu_only(model_id="test-grpc")
     return InferenceServer(
         node_id=node_id,
         layer_start=ls,
