@@ -1,4 +1,4 @@
-# Astra — 面向 DeepSeek-V4 的分布式 P2P 推理框架
+# Astra — 面向大型 MoE 模型的分布式 P2P 推理框架
 
 <div align="right">
   <a href="README.md"><b>English</b></a> ·
@@ -9,15 +9,15 @@
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org)
 [![Tests](https://img.shields.io/badge/tests-389%20passed-brightgreen)]()
 [![CI](https://github.com/qchauncey/astra/actions/workflows/ci.yml/badge.svg)](.github/workflows/ci.yml)
-[![Status](https://img.shields.io/badge/status-Phase%201--6%20完成%2C%20Phase%207%20硬件等待-blue)]()
+[![Status](https://img.shields.io/badge/status-Phase%201--6%20完成%2C%20Phase%207%20进行中-blue)]()
 
-**Astra** 是一个开源 P2P 分布式推理框架，可在普通 PC 集群（如 RTX 5070 Ti，每台 16 GB 显存）上运行 **DeepSeek-V4-Flash（284B）**，融合了三大核心思路：
+**Astra** 是一个开源 P2P 分布式推理框架，可在普通 PC 集群（如 RTX 5070 Ti，每台 16 GB 显存）上运行大型 MoE 模型，融合了三大核心思路：
 
 - **[Petals](https://github.com/bigscience-workshop/petals)** 式的去中心化流水线并行
 - **[KTransformers](https://github.com/kvcache-ai/ktransformers)** 式的异构 GPU/CPU 计算拆分
 - **[hivemind](https://github.com/learning-at-home/hivemind)** DHT 用于节点发现和键值存储
 
-> **Alpha 阶段。** Phase 1–6 已完成并通过测试（389 通过，1 跳过，CPU/NumPy CI 全部通过）。Phase 7（推理性能调优：连续批处理、投机解码、KTransformers C++ 绑定、专家复制）受硬件限制——需要 GPU 集群和 DeepSeek-V4 权重才能设计和验证。
+> **Alpha 阶段。** Phase 1–6 已完成并通过测试（389 通过，1 跳过，CPU/NumPy CI 全部通过）。当前验证目标：**MiniMax-M2.5**（126 GB，62 层，GQA，20 万词表）——真权加载、GQA 注意力、MoE 专家反量化及前向推理已端到端验证通过。Phase 7（KTransformers C++ 绑定、连续批处理、投机解码、专家复制）以 MiniMax-M2.5 为主要基准模型进行中。**DeepSeek-V4** 支持已规划，但需等待 KTransformers 上游完成 V4 架构适配后方可推进。
 
 ---
 
@@ -31,7 +31,7 @@
 | **Phase 4** | 差分隐私（ε/δ 预算、逐层噪声）、TEE（Intel SGX + AMD SEV-SNP） | ✅ 已完成 |
 | **Phase 5** | gRPC TLS 双向认证 + hivemind 多机 DHT 集成 | ✅ 已完成 |
 | **Phase 6** | SPA 仪表盘（聊天、监控、身份、收益）、挑战-应答登录、实时监控、代币记账 | ✅ 已完成 |
-| **Phase 7** | 推理引擎（KTransformers C++ 绑定、连续批处理、投机解码、专家复制） | 🔒 硬件等待 |
+| **Phase 7** | 推理引擎（MiniMax-M2.5 验证、KTransformers C++ 绑定、连续批处理、投机解码、专家复制） | 🔧 进行中 |
 
 > 逐项任务分解和前置条件详见 [docs/ROADMAP.md](docs/ROADMAP.md)
 
@@ -160,7 +160,7 @@ docs/                     # ARCHITECTURE、ROADMAP、TESTING、INSTALL、SECURIT
 |------|------|
 | [docs/INSTALL.md](docs/INSTALL.md) | 各平台安装指南 |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 系统设计、数据流、有线格式规范 |
-| [docs/ROADMAP.md](docs/ROADMAP.md) | 分阶段计划（Phase 1–6 ✓ · Phase 7 🔒 硬件等待） |
+| [docs/ROADMAP.md](docs/ROADMAP.md) | 分阶段计划（Phase 1–6 ✓ · Phase 7 🔧 进行中 — MiniMax-M2.5 验证） |
 | [docs/TESTING.md](docs/TESTING.md) | 测试策略：389 项测试 + 硬件测试清单 |
 | [docs/SECURITY.md](docs/SECURITY.md) | mTLS、差分隐私、TEE 远程证明 |
 | [docs/TEE.md](docs/TEE.md) | TEE 部署：Intel SGX（Gramine）和 AMD SEV-SNP |
@@ -182,7 +182,7 @@ docs/                     # ARCHITECTURE、ROADMAP、TESTING、INSTALL、SECURIT
 - 设置 `ASTRA_USE_KTRANSFORMERS=1` 激活真实 C++ 内核；默认为 NumPy 存根，支持无 GPU 环境下开发
 
 ### 3. 共享专家常驻
-DeepSeek-V4 的 2 个共享专家每个 token 都会触发。将其永久固定在 GPU 显存或高速 RAM 中，消除重复的 PCIe 数据传输。
+每个 token 都会触发共享专家（数量视模型而定，如 DeepSeek-V4 为 2 个）。将其永久固定在 GPU 显存或高速 RAM 中，消除重复的 PCIe 数据传输。
 
 ### 4. 去耦存储（Engram 记忆节点）
 基于 AstraDHT（hivemind DHT 替代方案），计算节点和 Engram 存储节点完全解耦——分布式 KV 缓存和模型权重分片可独立扩容。

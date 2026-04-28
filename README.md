@@ -1,4 +1,4 @@
-# Astra — Distributed P2P Inference for DeepSeek-V4
+# Astra — Distributed P2P Inference for Large MoE Models
 
 <div align="right">
   <a href="README.md"><b>English</b></a> ·
@@ -9,15 +9,15 @@
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org)
 [![Tests](https://img.shields.io/badge/tests-389%20passed-brightgreen)]()
 [![CI](https://github.com/qchauncey/astra/actions/workflows/ci.yml/badge.svg)](.github/workflows/ci.yml)
-[![Status](https://img.shields.io/badge/status-Phase%201--6%20complete%2C%20Phase%207%20hardware--blocked-blue)]()
+[![Status](https://img.shields.io/badge/status-Phase%201--6%20complete%2C%20Phase%207%20in%20progress-blue)]()
 
-**Astra** is an open-source P2P distributed inference framework that runs **DeepSeek-V4-Flash (284B)** across a cluster of commodity PCs (e.g., RTX 5070 Ti, 16 GB VRAM each) by combining:
+**Astra** is an open-source P2P distributed inference framework that runs large MoE models across a cluster of commodity PCs (e.g., RTX 5070 Ti, 16 GB VRAM each) by combining:
 
 - **[Petals](https://github.com/bigscience-workshop/petals)**-style decentralized pipeline parallelism
 - **[KTransformers](https://github.com/kvcache-ai/ktransformers)**-style heterogeneous GPU/CPU compute split
 - **[hivemind](https://github.com/learning-at-home/hivemind)** DHT for peer discovery and key-value storage
 
-> **Alpha.** Phase 1–6 are complete and tested (389 passed, 1 skipped, all passing on CPU/NumPy CI). Phase 7 (inference performance tuning — continuous batching, speculative decoding, KTransformers C++ binding, expert replication) is hardware-blocked: it requires a GPU cluster and DeepSeek-V4 weights to design and validate.
+> **Alpha.** Phase 1–6 are complete and tested (389 passed, 1 skipped, all passing on CPU/NumPy CI). Current validation target: **MiniMax-M2.5** (126 GB, 62 layers, GQA, 200K vocab) — real-weight loading, GQA attention, MoE expert dequant, and forward pass have been verified end-to-end. Phase 7 (KTransformers C++ binding, continuous batching, speculative decoding, expert replication) is in progress with MiniMax-M2.5 as the primary benchmark. **DeepSeek-V4** support is planned but blocked pending KTransformers upstream V4 architecture adaptation.
 
 ---
 
@@ -31,7 +31,7 @@
 | **Phase 4** | Differential privacy (ε/δ budget, per-layer noise), TEE (Intel SGX + AMD SEV-SNP) | ✅ Complete |
 | **Phase 5** | gRPC TLS mutual auth + hivemind multi-machine DHT integration | ✅ Complete |
 | **Phase 6** | SPA dashboard (Chat, Monitor, Identity, Earnings), challenge-response login, real-time monitoring, token accounting | ✅ Complete |
-| **Phase 7** | Inference engine (KTransformers C++ binding, continuous batching, speculative decoding, expert replication) | 🔒 Hardware-blocked |
+| **Phase 7** | Inference engine (MiniMax-M2.5 validation, KTransformers C++ binding, continuous batching, speculative decoding, expert replication) | 🔧 In Progress |
 
 > See [docs/ROADMAP.md](docs/ROADMAP.md) for per-task breakdown and prerequisites.
 
@@ -160,7 +160,7 @@ docs/                     # ARCHITECTURE, ROADMAP, TESTING, INSTALL, SECURITY, e
 |-----|----------|
 | [docs/INSTALL.md](docs/INSTALL.md) | Per-platform installation guide |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | System design, data flow, wire format spec |
-| [docs/ROADMAP.md](docs/ROADMAP.md) | Phase-by-phase plan (Phase 1–6 ✓ · Phase 7 🔒 hardware-blocked) |
+| [docs/ROADMAP.md](docs/ROADMAP.md) | Phase-by-phase plan (Phase 1–6 ✓ · Phase 7 🔧 in progress — MiniMax-M2.5 validation) |
 | [docs/TESTING.md](docs/TESTING.md) | Test strategy: 389 tests + hardware test checklist |
 | [docs/SECURITY.md](docs/SECURITY.md) | mTLS, differential privacy, TEE attestation |
 | [docs/TEE.md](docs/TEE.md) | TEE deployment: Intel SGX (Gramine) & AMD SEV-SNP |
@@ -182,7 +182,7 @@ Node physical location (Haversine great-circle distance + propagation delay esti
 - Set `ASTRA_USE_KTRANSFORMERS=1` to activate real C++ kernels; defaults to NumPy stubs for GPU-free development
 
 ### 3. Shared Expert Pinning
-DeepSeek-V4's 2 shared experts fire on every token. Permanently pinned to GPU VRAM or high-speed RAM, eliminating repeated PCIe data movement.
+Each token triggers shared experts (model-dependent, e.g. 2 in DeepSeek-V4). Permanently pinned to GPU VRAM or high-speed RAM, eliminating repeated PCIe data movement.
 
 ### 4. Decoupled Storage (Engram Memory Nodes)
 Built on AstraDHT (hivemind DHT drop-in), compute nodes and Engram storage nodes are fully decoupled — enabling independent scaling of distributed KV caches and model weight shards.
