@@ -17,29 +17,32 @@ python -m pytest tests/ -v
 |---------|---------|--------|
 | `test_serialization.py` | TensorPacket 序列化往返、边界情况、CRC 校验 | 14 |
 | `test_shared_expert_cache.py` | LRU 淘汰、固定策略、SiLU FFN 前向计算 | 11 |
-| `test_geo_router.py` | Haversine 距离、门控输出形状、地理最近节点分发 | 12 |
+| `test_geo_router.py` | Haversine 距离、门控输出形状、地理最近节点分发 | 14 |
 | `test_dht.py` | TTL 过期、订阅回调、节点注销、专家/层查询 | 14 |
 | `test_pipeline_grpc.py` | gRPC 单跳/双跳/流式、Ping、CRC 校验（间接调用 HeterogeneousEngine） | 10 |
-| `test_orchestrator.py` | N 节点串联、覆盖缺口检测、重试路径 | 9 |
+| `test_orchestrator.py` | N 节点串联、覆盖缺口检测、重试路径 | 6 |
 | `test_heterogeneous.py` | `_attention_forward`、`_moe_forward`、KV cache 累积、`DeviceMap` 配置 | 23 |
-| `test_kv_transfer.py` | `KVCacheSender`、`KVCacheReceiver` 重组、分块逻辑 | 20 |
-| `test_api.py` | `/v1/chat/completions`（普通 + 流式）、`/health`、`/v1/pipeline/topology` | 23 |
-| `test_check_env.py` | 环境检查工具逻辑验证 | 14 |
-| `test_differential_privacy.py` | 隐私预算会计、噪声校准、精度退化阈值、DP 注入到推理管道 | 18 |
-| `test_tee.py` | TEE 后端初始化、Gramine manifest 生成、SEV attestation、安全信道、密封密钥 | 15 |
-| `test_tls.py` | mTLS 证书生成、TLSConfig 服务端/客户端、双向认证、证书过期/域名不匹配拒绝 | 15 |
-| `test_hivemind_bridge.py` | hivemind DHT 桥接、节点加入/发现、多进程协调、KV 存储 CRUD、层覆盖查询 | 15 |
-| `test_phase6.py` | SPA 静态文件服务、WebSocket 实时监控、仪表盘端点、挑战-应答认证、代币账户 | 15 |
-| `test_continuous_batching.py` | 连续批处理调度、FCFS/SJF 策略、优先级抢占、批合并逻辑 | 25 |
+| `test_kv_transfer.py` | `KVCacheSender`、`KVCacheReceiver` 重组、分块逻辑 | 15 |
+| `test_api.py` | `/v1/chat/completions`（普通 + 流式）、`/health`、`/v1/pipeline/topology` | 22 |
+| `test_check_env.py` | 环境检查工具逻辑验证 | 20 |
+| `test_identity.py` | Ed25519 节点签名、TOFU 密钥注册表、PeerIdentity 序列化 | 17 |
+| `test_rtt.py` | RTT 探测、EWMA 平滑、故障计数、RTT 监控器启停 | 14 |
+| `test_engram.py` | 内存/磁盘存储、容量限制、可用性报告、DHT 集成注册/注销 | 18 |
+| `test_differential_privacy.py` | 隐私预算会计、噪声校准、精度退化阈值、DP 注入到推理管道 | 46 |
+| `test_tee.py` | TEE 后端初始化、Gramine manifest 生成、SEV attestation、安全信道、密封密钥、跨后端互操作 | 43 |
+| `test_tls.py` | mTLS 证书生成、TLSConfig 服务端/客户端、双向认证、证书过期/域名不匹配拒绝 | 20 |
+| `test_hivemind_bridge.py` | hivemind DHT 桥接、节点加入/发现、多进程协调、KV 存储 CRUD、层覆盖查询 | 16 |
+| `test_phase6.py` | SPA 静态文件服务、WebSocket 实时监控、仪表盘端点、挑战-应答认证、代币账户 | 25 |
+| `test_continuous_batching.py` | 连续批处理调度、FCFS/SJF 策略、优先级抢占、批合并逻辑 | 33 |
 | `test_speculative.py` | 投机解码草稿生成、验证接受/拒绝、KV 缓存回滚 | 20 |
-| `test_expert_replication.py` | 专家副本管理、健康检查、副本选举、故障转移 | 25 |
+| `test_expert_replication.py` | 专家副本管理、健康检查、副本选举、故障转移 | 33 |
 | `test_weight_loader.py` | safetensors 权重加载、分片映射、dtype 转换、层偏移计算 | 23 |
 | `test_tokenizer.py` | Token 编码/解码、特殊 token 处理、批量分词、chat template | 23 |
-| `test_weight_manifest.py` | 权重清单解析、层到节点映射、校验和验证 | 14 |
+| `test_weight_manifest.py` | 权重清单解析、层到节点映射、校验和验证 | 18 |
 
 ### 1.2 已填补的覆盖空缺（Phase 3–7 完成）
 
-所有在 Phase 1/2 标记为"待补充"的测试文件现已编写并纳入 CI 流水线。`test_heterogeneous.py`、`test_kv_transfer.py`、`test_api.py`、`test_differential_privacy.py`、`test_tee.py`、`test_tls.py`、`test_hivemind_bridge.py`、`test_phase6.py`、`test_continuous_batching.py`、`test_speculative.py`、`test_expert_replication.py`、`test_weight_loader.py`、`test_tokenizer.py`、`test_weight_manifest.py` 直接测试各自模块，共计 498 个测试（Phase 1/2: 168 + Phase 3: 84 + Phase 4: 33 + Phase 5: 30 + Phase 6: 15 + Phase 7: 130 + 其他: ~38）。
+所有在 Phase 1/2 标记为"待补充"的测试文件现已编写并纳入 CI 流水线。`test_heterogeneous.py`、`test_kv_transfer.py`、`test_api.py`、`test_identity.py`、`test_rtt.py`、`test_engram.py`、`test_differential_privacy.py`、`test_tee.py`、`test_tls.py`、`test_hivemind_bridge.py`、`test_phase6.py`、`test_continuous_batching.py`、`test_speculative.py`、`test_expert_replication.py`、`test_weight_loader.py`、`test_tokenizer.py`、`test_weight_manifest.py` 直接测试各自模块，共计 498 个测试（覆盖 Phase 1–7 全部模块）。
 
 #### 剩余覆盖空缺（待补充）
 
