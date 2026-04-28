@@ -165,7 +165,7 @@ authentication, weight integrity, and storage/compute role separation.
 > **Scope note (April 2026):** All code deliverables — TLS certificate generation,
 > mTLS server/client integration, TOFU trust store, hivemind DHT bridge, and the
 > `create_dht()` factory with graceful degradation — are complete and tested
-> (389 passed, 1 skipped). Multi-machine bootstrap validation (multiple physical
+> (498 passed, 1 skipped). Multi-machine bootstrap validation (multiple physical
 > nodes) is a deployment verification step, not a software gap. See
 > [docs/HIVEMIND.md](HIVEMIND.md) §8 Production Checklist for the per-node setup
 > procedure.
@@ -212,7 +212,7 @@ authentication, weight integrity, and storage/compute role separation.
 
 ---
 
-## Phase 7 — Inference Performance Tuning (IN PROGRESS)
+## Phase 7 — Inference Performance Tuning (✓ COMPLETE — software; hardware integration pending)
 
 **Goal:** Connect the numpy stub to real GPU hardware, validate multi-machine
 P2P operation, and implement production inference optimizations (continuous
@@ -328,7 +328,7 @@ batching, speculative decoding, expert replication).
 
 | Layer | Tool | Current Status | Coverage Target |
 |-----|------|---------|---------|
-| Unit (CPU) | pytest | ✅ 389 passed + 1 skipped | Serialization, LRU cache, Haversine + real RTT, DHT, Engram, Peer Identity, Weight Manifest, gRPC TLS, HeterogeneousEngine, Tokenizer, KVTransfer, OpenAI API, Phase 6 dashboard |
+| Unit (CPU) | pytest | ✅ 498 passed + 1 skipped | Serialization, LRU cache, Haversine + real RTT, DHT, Engram, Peer Identity, Weight Manifest, gRPC TLS, HeterogeneousEngine, Tokenizer, KVTransfer, OpenAI API, Phase 6 dashboard, Continuous Batching, Speculative Decoding, Expert Replication, Weight Loader, Tokenizer, Weight Manifest |
 | Integration (local) | pytest + threading | ✅ Covered | mock_pipeline.py Phase 1 & 2 |
 | Hardware Integration | Self-hosted GPU Runner | ❌ Not configured | KTransformers C++ kernels, real-weight numerical alignment |
 | Load Test | scripts/load_test.py (asyncio+httpx) | ✅ Implemented | 100 concurrent requests, throughput & P99 latency |
@@ -357,7 +357,7 @@ batching, speculative decoding, expert replication).
 
 ## Known Limitations (Alpha)
 
-1. **MiniMax-M2.5 validated; DeepSeek-V4 pending** — Real-weight loading, GQA attention, MoE expert dequant, and forward pass have been verified end-to-end with MiniMax-M2.5 (126 GB, 62 layers). Phase 7 optimizations (KTransformers C++ binding, continuous batching, speculative decoding, expert replication) are in progress against MiniMax-M2.5. DeepSeek-V4 support is planned but blocked pending KTransformers upstream V4 architecture adaptation.
+1. **MiniMax-M2.5 validated; DeepSeek-V4 pending** — Real-weight loading, GQA attention, MoE expert dequant, and forward pass have been verified end-to-end with MiniMax-M2.5 (126 GB, 62 layers). Phase 7 software optimizations (continuous batching, speculative decoding, expert replication, weight loader, tokenizer, weight manifest) are complete on CPU; KTransformers C++ binding integration is blocked pending hardware. DeepSeek-V4 support is planned but blocked pending KTransformers upstream V4 architecture adaptation.
 2. **KTransformersStub is numpy** — ~100× slower than C++ CUDA kernels.
    Use for correctness testing only.
 3. **DHT bridge ready, multi-machine validation pending** — The hivemind DHT
