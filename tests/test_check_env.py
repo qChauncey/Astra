@@ -31,7 +31,7 @@ import check_env  # noqa: E402
 def _results(overrides: dict | None = None) -> dict:
     """Return a base results dict where all required deps are satisfied."""
     base = {
-        "Python ≥3.10":  {"ok": True,  "detail": "3.11.0 ✓"},
+        "Python >=3.10": {"ok": True,  "detail": "3.11.0 ✓"},
         "numpy":         {"ok": True,  "detail": "1.26.0"},
         "psutil":        {"ok": True,  "detail": "5.9.0"},
         "grpcio":        {"ok": True,  "detail": "1.60.0"},

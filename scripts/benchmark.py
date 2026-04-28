@@ -147,21 +147,24 @@ def _run_single_node(
         DeviceMap,
         HeterogeneousEngine,
     )
+    from astra.serialization.tensor_pack import TensorPacket
 
     device_map = DeviceMap.cpu_only()
-    engine = HeterogeneousEngine(
-        layer_start=0,
-        layer_end=num_layers,
-        hidden_dim=hidden_dim,
-        device_map=device_map,
-    )
+    engine = HeterogeneousEngine(device_map=device_map)
     hidden = np.random.randn(seq_len, hidden_dim).astype(np.float16)
     token_ids = np.random.randint(0, 32000, size=(seq_len,)).tolist()
 
+    packet = TensorPacket(
+        tensor=hidden,
+        layer_start=0,
+        layer_end=num_layers,
+        token_ids=token_ids,
+    )
+
     t0 = time.perf_counter()
-    output = engine.forward(hidden, token_ids=token_ids)
+    output = engine.forward(packet)
     elapsed_ms = (time.perf_counter() - t0) * 1000.0
-    tokens_out = output.shape[0] if hasattr(output, "shape") else seq_len
+    tokens_out = output.tensor.shape[0] if hasattr(output, "tensor") else seq_len
     return RunResult(latency_ms=elapsed_ms, tokens_generated=tokens_out)
 
 
@@ -176,18 +179,17 @@ def _run_grpc(
 
     hidden = np.random.randn(seq_len, hidden_dim).astype(np.float16)
     packet = TensorPacket(
-        hidden_states=hidden,
+        tensor=hidden,
         token_ids=list(range(seq_len)),
         layer_start=0,
         layer_end=1,
-        seq_len=seq_len,
     )
 
     t0 = time.perf_counter()
     client = InferenceClient(target=nodes[0])
     result = client.infer(packet)
     elapsed_ms = (time.perf_counter() - t0) * 1000.0
-    tokens_out = result.hidden_states.shape[0] if result else seq_len
+    tokens_out = result.tensor.shape[0] if result else seq_len
     return RunResult(latency_ms=elapsed_ms, tokens_generated=tokens_out)
 
 

@@ -53,7 +53,7 @@ def _check(label: str, fn, *args) -> Tuple[bool, str]:
 def check_python() -> Tuple[bool, str]:
     v = sys.version_info
     ok = v >= (3, 10)
-    return ok, f"{v.major}.{v.minor}.{v.micro} {'✓' if ok else '✗ (need ≥3.10)'}"
+    return ok, f"{v.major}.{v.minor}.{v.micro} {'OK' if ok else 'FAIL (need >=3.10)'}"
 
 
 def check_package(name: str, attr: str = "__version__") -> Tuple[bool, str]:
@@ -87,7 +87,7 @@ def check_ktransformers() -> Tuple[bool, str]:
         return True, f"{getattr(kt, '__version__', 'unknown')} (C++ kernels available)"
     except ImportError:
         return False, (
-            "NOT INSTALLED — using numpy stub.\n"
+            "NOT INSTALLED -- using numpy stub.\n"
             "    Install: https://github.com/kvcache-ai/ktransformers"
         )
 
@@ -98,7 +98,7 @@ def check_hivemind() -> Tuple[bool, str]:
         return True, f"{hivemind.__version__} (DHT available)"
     except ImportError:
         return False, (
-            "NOT INSTALLED — DHT node discovery unavailable (Phase 3).\n"
+            "NOT INSTALLED -- DHT node discovery unavailable (Phase 3).\n"
             "    Install: pip install hivemind"
         )
 
@@ -108,7 +108,7 @@ def check_grpc() -> Tuple[bool, str]:
         import grpc  # type: ignore
         return True, f"{grpc.__version__}"
     except ImportError:
-        return False, "NOT INSTALLED — RPC layer disabled"
+        return False, "NOT INSTALLED -- RPC layer disabled"
 
 
 def check_ram() -> Tuple[bool, str]:
@@ -117,7 +117,7 @@ def check_ram() -> Tuple[bool, str]:
         mem = psutil.virtual_memory()
         mem_gb = mem.total / 1024 ** 3
         ok = mem_gb >= 64.0
-        return ok, f"{mem_gb:.1f} GB total  ({mem.available / 1024 ** 3:.1f} GB available)  {'✓' if ok else '✗ (≥64 GB recommended for 284B MoE weights)'}"
+        return ok, f"{mem_gb:.1f} GB total  ({mem.available / 1024 ** 3:.1f} GB available)  {'OK' if ok else 'WARN (>=64 GB recommended for 284B MoE weights)'}"
     except ImportError:
         return True, "unknown (psutil not installed)"
 
@@ -155,7 +155,7 @@ def check_nvidia_smi() -> Tuple[bool, str]:
 def check_astra_import() -> Tuple[bool, str]:
     try:
         import astra  # type: ignore
-        return True, f"astra {astra.__version__} — all submodules importable"
+        return True, f"astra {astra.__version__} -- all submodules importable"
     except Exception as exc:
         return False, str(exc)
 
@@ -171,16 +171,16 @@ def check_inference_eligibility(results: "Dict[str, Any]") -> Tuple[str, str]:
     Derive the node's eligible cluster role from check results.
 
     Returns (role, reason) where role is one of:
-      "inference"  — can serve as a full inference pipeline node
-      "gateway"    — can serve as API gateway or DHT node only
-      "dev"        — missing core deps; development / testing only
+      "inference"  -- can serve as a full inference pipeline node
+      "gateway"    -- can serve as API gateway or DHT node only
+      "dev"        -- missing core deps; development / testing only
     """
     required_ok = all(
         results.get(k, {}).get("ok", False)
-        for k in ("Python ≥3.10", "numpy", "psutil", "grpcio", "astra package")
+        for k in ("Python >=3.10", "numpy", "psutil", "grpcio", "astra package")
     )
     if not required_ok:
-        return "dev", "Missing required dependencies — development / testing only"
+        return "dev", "Missing required dependencies -- development / testing only"
 
     # Check GPU VRAM via PyTorch
     vram_ok = False
@@ -193,7 +193,7 @@ def check_inference_eligibility(results: "Dict[str, Any]") -> Tuple[str, str]:
                 for i in range(torch.cuda.device_count())
             ) / 1024 ** 3
             vram_ok = max_vram >= _MIN_VRAM_GB
-            vram_detail = f"best GPU VRAM = {max_vram:.1f} GB (need ≥{_MIN_VRAM_GB:.0f} GB)"
+            vram_detail = f"best GPU VRAM = {max_vram:.1f} GB (need >={_MIN_VRAM_GB:.0f} GB)"
     except Exception:
         pass
 
@@ -204,7 +204,7 @@ def check_inference_eligibility(results: "Dict[str, Any]") -> Tuple[str, str]:
         import psutil
         ram_gb = psutil.virtual_memory().total / 1024 ** 3
         ram_ok = ram_gb >= _MIN_RAM_GB
-        ram_detail = f"RAM = {ram_gb:.1f} GB (need ≥{_MIN_RAM_GB:.0f} GB)"
+        ram_detail = f"RAM = {ram_gb:.1f} GB (need >={_MIN_RAM_GB:.0f} GB)"
     except Exception:
         pass
 
@@ -216,12 +216,12 @@ def check_inference_eligibility(results: "Dict[str, Any]") -> Tuple[str, str]:
         root = "C:\\" if platform.system() == "Windows" else "/"
         free_gb = psutil.disk_usage(root).free / 1024 ** 3
         disk_ok = free_gb >= _MIN_DISK_GB
-        disk_detail = f"free disk = {free_gb:.1f} GB (need ≥{_MIN_DISK_GB:.0f} GB)"
+        disk_detail = f"free disk = {free_gb:.1f} GB (need >={_MIN_DISK_GB:.0f} GB)"
     except Exception:
         pass
 
     if vram_ok and ram_ok and disk_ok:
-        return "inference", "✓ GPU VRAM, RAM, and disk all meet minimums — eligible as inference node"
+        return "inference", "GPU VRAM, RAM, and disk all meet minimums -- eligible as inference node"
 
     reasons = []
     if not vram_ok:
@@ -233,11 +233,19 @@ def check_inference_eligibility(results: "Dict[str, Any]") -> Tuple[str, str]:
     return "gateway", "Cannot serve as inference node: " + "; ".join(reasons)
 
 
-# ─────────────────────────────────────────────────────────────────────────── #
+# --------------------------------------------------------------------------- #
+
+def _use_color() -> bool:
+    """Return True if ANSI color escapes are safe to emit."""
+    if hasattr(sys.stdout, "isatty") and sys.stdout.isatty():
+        return True
+    # GitHub Actions / CI logs also support ANSI colors
+    return bool(sys.stdout.encoding and sys.stdout.encoding.lower() in ("utf-8", "utf8"))
+
 
 def run_checks() -> Dict[str, Any]:
     checks = [
-        ("Python ≥3.10",        check_python),
+        ("Python >=3.10",        check_python),
         ("numpy",               lambda: check_package("numpy")),
         ("psutil",              lambda: check_package("psutil")),
         ("grpcio",              check_grpc),
@@ -261,12 +269,17 @@ def run_checks() -> Dict[str, Any]:
 
 
 def print_report(results: Dict[str, Any]) -> None:
-    PASS = "\033[92m PASS\033[0m"
-    FAIL = "\033[91m FAIL\033[0m"
-    WARN = "\033[93m WARN\033[0m"
+    if _use_color():
+        PASS = "\033[92m PASS\033[0m"
+        FAIL = "\033[91m FAIL\033[0m"
+        WARN = "\033[93m WARN\033[0m"
+    else:
+        PASS = "PASS"
+        FAIL = "FAIL"
+        WARN = "WARN"
 
     # Required vs optional
-    required = {"Python ≥3.10", "numpy", "psutil", "grpcio", "astra package"}
+    required = {"Python >=3.10", "numpy", "psutil", "grpcio", "astra package"}
     optional_critical = {"PyTorch + CUDA", "KTransformers C++"}
 
     print("\n" + "=" * 72)
@@ -291,19 +304,19 @@ def print_report(results: Dict[str, Any]) -> None:
 
     print("=" * 72)
     if all_required_ok:
-        print("  ✓ Required dependencies satisfied — ready to run mock_pipeline.py")
+        print("  [OK] Required dependencies satisfied -- ready to run mock_pipeline.py")
     else:
-        print("  ✗ Some required dependencies missing — see FAIL items above")
+        print("  [FAIL] Some required dependencies missing -- see FAIL items above")
     print()
 
     # Recommendations
     recs = []
     if not results.get("PyTorch + CUDA", {}).get("ok"):
-        recs.append("• Install PyTorch with CUDA: https://pytorch.org/get-started/locally/")
+        recs.append("- Install PyTorch with CUDA: https://pytorch.org/get-started/locally/")
     if not results.get("KTransformers C++", {}).get("ok"):
-        recs.append("• Build KTransformers for full GPU/CPU heterogeneous performance.")
+        recs.append("- Build KTransformers for full GPU/CPU heterogeneous performance.")
     if not results.get("hivemind DHT", {}).get("ok"):
-        recs.append("• Install hivemind for Phase 3 P2P node discovery.")
+        recs.append("- Install hivemind for Phase 3 P2P node discovery.")
     if recs:
         print("  Recommendations:")
         for r in recs:
@@ -312,14 +325,21 @@ def print_report(results: Dict[str, Any]) -> None:
 
     # Node role eligibility verdict
     role, reason = check_inference_eligibility(results)
-    role_labels = {
-        "inference": ("\033[92m INFERENCE NODE \033[0m", "Can join cluster as a full pipeline inference node"),
-        "gateway":   ("\033[93m API GATEWAY    \033[0m", "Can run as API gateway or DHT discovery node only"),
-        "dev":       ("\033[91m DEV / TEST ONLY\033[0m", "Cannot join cluster; use for development and testing"),
-    }
+    if _use_color():
+        role_labels = {
+            "inference": ("\033[92m INFERENCE NODE \033[0m", "Can join cluster as a full pipeline inference node"),
+            "gateway":   ("\033[93m API GATEWAY    \033[0m", "Can run as API gateway or DHT discovery node only"),
+            "dev":       ("\033[91m DEV / TEST ONLY\033[0m", "Cannot join cluster; use for development and testing"),
+        }
+    else:
+        role_labels = {
+            "inference": ("INFERENCE NODE", "Can join cluster as a full pipeline inference node"),
+            "gateway":   ("API GATEWAY",    "Can run as API gateway or DHT discovery node only"),
+            "dev":       ("DEV / TEST ONLY", "Cannot join cluster; use for development and testing"),
+        }
     label, desc = role_labels[role]
     print("=" * 72)
-    print(f"  Node role eligibility:{label}")
+    print(f"  Node role eligibility: {label}")
     print(f"  {desc}")
     print(f"  {reason}")
     print("=" * 72)
@@ -338,7 +358,7 @@ def main() -> None:
     else:
         print_report(results)
 
-    required = {"Python ≥3.10", "numpy", "psutil", "grpcio", "astra package"}
+    required = {"Python >=3.10", "numpy", "psutil", "grpcio", "astra package"}
     if not all(results[k]["ok"] for k in required if k in results):
         sys.exit(1)
 
