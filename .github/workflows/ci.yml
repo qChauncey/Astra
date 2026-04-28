@@ -27,8 +27,8 @@ jobs:
       - name: Install package and CPU-only dependencies
         run: |
           pip install --upgrade pip
-          pip install -e ".[proto]"
-          pip install pytest pytest-cov httpx starlette
+          pip install -e ".[proto,dev]"
+          pip install pytest-cov httpx starlette anyio
 
       - name: Run test suite
         run: |
@@ -39,6 +39,9 @@ jobs:
 
       - name: Smoke-test mock pipeline Phase 2
         run: python mock_pipeline.py --phase 2 --seq-len 8 --hidden-dim 256
+
+      - name: Smoke-test astra-check-env entry point
+        run: astra-check-env || true
 
   lint:
     name: "Lint"
