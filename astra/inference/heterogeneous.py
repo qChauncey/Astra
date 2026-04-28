@@ -189,16 +189,29 @@ def _detect_backend() -> tuple:
     try:
         import torch
         if torch.cuda.is_available():
-            # Smoke test: verify the installed PyTorch build actually supports
-            # this GPU's compute capability (e.g., sm_120 Blackwell requires
-            # a newer PyTorch than what cu124 wheels ship).
-            try:
-                t = torch.zeros(1, device="cuda")
-                _ = torch.mean(t)
-            except Exception:
-                pass  # GPU too new for this PyTorch build → fall through
-            else:
-                return "pytorch_cuda", torch
+            # Compute-capability guard: cu124 PyTorch wheels ship kernels
+            # for sm_50–sm_90 only.  Blackwell GPUs (sm_100+, e.g. RTX 50xx)
+            # require a newer PyTorch build.  Skip them deterministically
+            # rather than relying on catching an async CUDA kernel error.
+            cap_major = torch.cuda.get_device_capability()[0]
+            if cap_major < 10:
+                # Smoke test: verify the installed PyTorch build actually
+                # supports this GPU's compute capability.  Must exercise
+                # the exact kernel path used by rms_layer_norm():
+                #   3D float32 tensor → **2 → mean(dim=-1, keepdim=True) →
+                #   sqrt → division → multiply.
+                # A simple 2D reduction may pass sm_120 while the 3D keepdim
+                # variant fails, so we mirror the real call precisely.
+                try:
+                    t3d = torch.randn(4, 16, 64, device="cuda",
+                                      dtype=torch.float32)
+                    _ = torch.sqrt(torch.mean(t3d ** 2, dim=-1,
+                                              keepdim=True) + 1e-6)
+                    torch.cuda.synchronize()
+                except Exception:
+                    pass  # unsupported → fall through
+                else:
+                    return "pytorch_cuda", torch
     except ImportError:
         pass
 
