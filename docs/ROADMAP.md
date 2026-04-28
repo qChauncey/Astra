@@ -218,11 +218,15 @@ authentication, weight integrity, and storage/compute role separation.
 P2P operation, and implement production inference optimizations (continuous
 batching, speculative decoding, expert replication).
 
-> **Two distinct work categories remain:** items that only require hardware
-> to *run* (validation/configuration — code is already written), and items
-> that require hardware to *design* (new software must be built alongside
-> measurement data). Both categories are blocked until a GPU cluster is
-> available.
+> **Current validation target: MiniMax-M2.5** (126 GB, 62 layers, GQA, 200K vocab).
+> Real-weight loading, GQA attention, MoE expert dequant, and forward pass have
+> been verified end-to-end. KTransformers C++ binding, continuous batching,
+> speculative decoding, and expert replication are being validated against
+> MiniMax-M2.5.
+>
+> **DeepSeek-V4** support is planned but blocked pending KTransformers upstream
+> V4 architecture adaptation. Once KTransformers adds V4 MLA kernel support,
+> the validation target will shift to DeepSeek-V4.
 
 ### 7.1 Soft Deliverables ✓ COMPLETE
 
@@ -242,7 +246,7 @@ batching, speculative decoding, expert replication).
 | Task | Nature | Prerequisite |
 |------|--------|--------------|
 | Register self-hosted GPU runner | Config | 1× Linux machine + CUDA GPU; runner registered in GitHub Actions Settings |
-| Run `hardware_test.yml` → real-weight numerical alignment | Test | Runner above + DeepSeek-V4-Flash weights (580 GB, HuggingFace) |
+| Run `hardware_test.yml` → real-weight numerical alignment | Test | Runner above + MiniMax-M2.5 weights (126 GB, HuggingFace); DeepSeek-V4 pending KTransformers upstream V4 support |
 | Multi-machine DHT bootstrap (3+ physical nodes) | Test | 3 machines; run `create_dht(use_hivemind=True)` on each with shared `initial_peers` |
 | Cross-machine KV-cache transfer validation | Test | 2-node cluster; observe `KVCacheSender/Receiver` logs |
 | Multi-machine gRPC latency/throughput benchmark | Test | 2+ machines, ≥1 Gbps LAN; run `scripts/benchmark.py --mode grpc` |
@@ -268,7 +272,7 @@ batching, speculative decoding, expert replication).
 | Replace numpy stub in `HeterogeneousEngine._moe_forward()` | 🔒 Blocked | Call `ktransformers.ops.expert_forward(hidden, weight_path, ...)` |
 | Handle CUDA tensor lifecycle (device placement, dtype casting) | 🔒 Blocked | Tensors must stay on GPU between attention and MoE to avoid PCIe round-trip |
 | Update `HeterogeneousEngine.from_gpu_config()` to pass CUDA device | 🔒 Blocked | Currently passes dummy device string |
-| **Prerequisite** | 🔒 Blocked | `ktransformers` compiled for target CUDA arch + DeepSeek-V4 safetensors shards |
+| **Prerequisite** | 🔒 Blocked | `ktransformers` compiled for target CUDA arch + MiniMax-M2.5 safetensors shards; DeepSeek-V4 pending KTransformers upstream V4 MLA kernel |
 
 #### 7.3.2 Continuous Batching
 **Effort:** Large — touches scheduler, server, orchestrator, and KV-cache.
@@ -313,7 +317,7 @@ batching, speculative decoding, expert replication).
 | Attention kernel | numpy `@` matmul | `ktransformers.ops.mla_forward` |
 | DHT | in-memory dict / `HivemindDHT` (Phase 5 done) | `hivemind.DHT` |
 | Transport | gRPC | gRPC with mTLS (done — Phase 5) ✅ |
-| Model weights | random arrays | DeepSeek-V4 safetensors shards |
+| Model weights | random arrays | MiniMax-M2.5 safetensors shards (primary); DeepSeek-V4 pending KTransformers upstream V4 adaptation |
 | Memory | 16–64 GB RAM | 512 GB+ NVMe-backed mmap |
 
 ---
@@ -353,10 +357,7 @@ batching, speculative decoding, expert replication).
 
 ## Known Limitations (Alpha)
 
-1. **No real model weights** — all tensors are random. The infrastructure
-   (loader, manifest verification, tokenizer, gRPC, DHT) is ready to accept
-   real weights, but Phase 7 work (real KTransformers + GPU validation)
-   remains.
+1. **MiniMax-M2.5 validated; DeepSeek-V4 pending** — Real-weight loading, GQA attention, MoE expert dequant, and forward pass have been verified end-to-end with MiniMax-M2.5 (126 GB, 62 layers). Phase 7 optimizations (KTransformers C++ binding, continuous batching, speculative decoding, expert replication) are in progress against MiniMax-M2.5. DeepSeek-V4 support is planned but blocked pending KTransformers upstream V4 architecture adaptation.
 2. **KTransformersStub is numpy** — ~100× slower than C++ CUDA kernels.
    Use for correctness testing only.
 3. **DHT bridge ready, multi-machine validation pending** — The hivemind DHT
