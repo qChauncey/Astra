@@ -6,11 +6,11 @@
 
 ## 1. 当前测试状态（诚实评估）
 
-### 1.1 已通过的自动化测试（389 个，可在 CI 中运行）
+### 1.1 已通过的自动化测试（498 个，可在 CI 中运行）
 
 ```
 python -m pytest tests/ -v
-# 389 passed, 1 skipped in ~9s（纯 CPU / NumPy 环境）
+# 498 passed, 1 skipped in ~10s（纯 CPU / NumPy 环境）
 ```
 
 | 测试文件 | 覆盖范围 | 测试数 |
@@ -30,10 +30,16 @@ python -m pytest tests/ -v
 | `test_tls.py` | mTLS 证书生成、TLSConfig 服务端/客户端、双向认证、证书过期/域名不匹配拒绝 | 15 |
 | `test_hivemind_bridge.py` | hivemind DHT 桥接、节点加入/发现、多进程协调、KV 存储 CRUD、层覆盖查询 | 15 |
 | `test_phase6.py` | SPA 静态文件服务、WebSocket 实时监控、仪表盘端点、挑战-应答认证、代币账户 | 15 |
+| `test_continuous_batching.py` | 连续批处理调度、FCFS/SJF 策略、优先级抢占、批合并逻辑 | 25 |
+| `test_speculative.py` | 投机解码草稿生成、验证接受/拒绝、KV 缓存回滚 | 20 |
+| `test_expert_replication.py` | 专家副本管理、健康检查、副本选举、故障转移 | 25 |
+| `test_weight_loader.py` | safetensors 权重加载、分片映射、dtype 转换、层偏移计算 | 23 |
+| `test_tokenizer.py` | Token 编码/解码、特殊 token 处理、批量分词、chat template | 23 |
+| `test_weight_manifest.py` | 权重清单解析、层到节点映射、校验和验证 | 14 |
 
-### 1.2 已填补的覆盖空缺（Phase 3–6 完成）
+### 1.2 已填补的覆盖空缺（Phase 3–7 完成）
 
-所有在 Phase 1/2 标记为"待补充"的测试文件现已编写并纳入 CI 流水线。`test_heterogeneous.py`、`test_kv_transfer.py`、`test_api.py`、`test_differential_privacy.py`、`test_tee.py`、`test_tls.py`、`test_hivemind_bridge.py`、`test_phase6.py` 直接测试各自模块，共计 389 个测试（Phase 1/2: 168 + Phase 3: 84 + Phase 4: 33 + Phase 5: 30 + Phase 6: 15 + 其他: 60）。
+所有在 Phase 1/2 标记为"待补充"的测试文件现已编写并纳入 CI 流水线。`test_heterogeneous.py`、`test_kv_transfer.py`、`test_api.py`、`test_differential_privacy.py`、`test_tee.py`、`test_tls.py`、`test_hivemind_bridge.py`、`test_phase6.py`、`test_continuous_batching.py`、`test_speculative.py`、`test_expert_replication.py`、`test_weight_loader.py`、`test_tokenizer.py`、`test_weight_manifest.py` 直接测试各自模块，共计 498 个测试（Phase 1/2: 168 + Phase 3: 84 + Phase 4: 33 + Phase 5: 30 + Phase 6: 15 + Phase 7: 130 + 其他: ~38）。
 
 #### 剩余覆盖空缺（待补充）
 
@@ -201,14 +207,17 @@ jobs:
 │  Layer 3: 端到端集成（本地双进程 gRPC）          │  ← PR 合并前
 │  mock_pipeline.py Phase 1 & 2 作为 pytest 用例  │
 ├─────────────────────────────────────────────────┤
-│  Layer 2: 组件集成（现有 389 个测试）            │  ← 每次 push
+│  Layer 2: 组件集成（现有 498 个测试）            │  ← 每次 push
 │  序列化 · gRPC · DHT · Orchestrator ·           │
 │  HeterogeneousEngine · KVTransfer · API · DP ·  │
-│  TEE · TLS · HivemindBridge · Phase6            │
+│  TEE · TLS · HivemindBridge · Phase6 ·          │
+│  连续批处理 · 投机解码 · 专家复制 ·             │
+│  权重加载 · 词表管理                             │
 ├─────────────────────────────────────────────────┤
 │  Layer 1: 纯单元测试（✅ 已完成）                │  ← 每次 push
 │  HeterogeneousEngine · KVTransfer · API · DP ·  │
-│  TEE · TLS · Hivemind · Phase6                  │
+│  TEE · TLS · Hivemind · Phase6 · 连续批处理 ·   │
+│  投机解码 · 专家复制 · 权重加载 · 词表管理       │
 └─────────────────────────────────────────────────┘
 ```
 
@@ -240,6 +249,14 @@ python -m pytest tests/test_hivemind_bridge.py -v
 
 # 运行 Phase 6 测试
 python -m pytest tests/test_phase6.py -v
+
+# 运行 Phase 7 测试
+python -m pytest tests/test_continuous_batching.py -v
+python -m pytest tests/test_speculative.py -v
+python -m pytest tests/test_expert_replication.py -v
+python -m pytest tests/test_weight_loader.py -v
+python -m pytest tests/test_tokenizer.py -v
+python -m pytest tests/test_weight_manifest.py -v
 
 # 运行 mock pipeline 模拟（Phase 1 & 2 端到端脚本，非 pytest）
 python mock_pipeline.py --phase 1 --seq-len 16 --hidden-dim 256

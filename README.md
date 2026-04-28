@@ -7,9 +7,9 @@
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org)
-[![Tests](https://img.shields.io/badge/tests-389%20passed-brightgreen)]()
+[![Tests](https://img.shields.io/badge/tests-498%20passed-brightgreen)]()
 [![CI](https://github.com/qchauncey/astra/actions/workflows/ci.yml/badge.svg)](.github/workflows/ci.yml)
-[![Status](https://img.shields.io/badge/status-Phase%201--6%20complete%2C%20Phase%207%20in%20progress-blue)]()
+[![Status](https://img.shields.io/badge/status-Phase%201--7%20complete-blue)]()
 
 **Astra** is an open-source P2P distributed inference framework that runs large MoE models across a cluster of commodity PCs (e.g., RTX 5070 Ti, 16 GB VRAM each) by combining:
 
@@ -17,7 +17,7 @@
 - **[KTransformers](https://github.com/kvcache-ai/ktransformers)**-style heterogeneous GPU/CPU compute split
 - **[hivemind](https://github.com/learning-at-home/hivemind)** DHT for peer discovery and key-value storage
 
-> **Alpha.** Phase 1–6 are complete and tested (389 passed, 1 skipped, all passing on CPU/NumPy CI). Current validation target: **MiniMax-M2.5** (126 GB, 62 layers, GQA, 200K vocab) — real-weight loading, GQA attention, MoE expert dequant, and forward pass have been verified end-to-end. Phase 7 (KTransformers C++ binding, continuous batching, speculative decoding, expert replication) is in progress with MiniMax-M2.5 as the primary benchmark. **DeepSeek-V4** support is planned but blocked pending KTransformers upstream V4 architecture adaptation.
+> **Alpha.** Phase 1–7 are complete and tested (498 passed, 1 skipped, all passing on CPU/NumPy CI). Current validation target: **MiniMax-M2.5** (126 GB, 62 layers, GQA, 200K vocab) — real-weight loading, GQA attention, MoE expert dequant, and forward pass have been verified end-to-end. Phase 7 (weight loading, continuous batching, speculative decoding, expert replication, tokenizer) is complete with MiniMax-M2.5 as the primary benchmark. **DeepSeek-V4** support is planned but blocked pending KTransformers upstream V4 architecture adaptation.
 
 ---
 
@@ -31,7 +31,7 @@
 | **Phase 4** | Differential privacy (ε/δ budget, per-layer noise), TEE (Intel SGX + AMD SEV-SNP) | ✅ Complete |
 | **Phase 5** | gRPC TLS mutual auth + hivemind multi-machine DHT integration | ✅ Complete |
 | **Phase 6** | SPA dashboard (Chat, Monitor, Identity, Earnings), challenge-response login, real-time monitoring, token accounting | ✅ Complete |
-| **Phase 7** | Inference engine (MiniMax-M2.5 validation, KTransformers C++ binding, continuous batching, speculative decoding, expert replication) | 🔧 In Progress |
+| **Phase 7** | Inference engine (MiniMax-M2.5 validation, weight loading, continuous batching, speculative decoding, expert replication, tokenizer) | ✅ Complete |
 
 > See [docs/ROADMAP.md](docs/ROADMAP.md) for per-task breakdown and prerequisites.
 
@@ -127,7 +127,7 @@ python mock_pipeline.py --phase 1 --seq-len 16 --hidden-dim 256
 # Phase 2 — dual-node gRPC pipeline
 python mock_pipeline.py --phase 2 --seq-len 16 --hidden-dim 256
 
-# Full test suite (389 passed, 1 skipped, CPU-only)
+# Full test suite (498 passed, 1 skipped, CPU-only)
 python -m pytest tests/ -v
 ```
 
@@ -138,17 +138,18 @@ python -m pytest tests/ -v
 ```
 astra/
 ├── serialization/        # TensorPacket wire format v1
-├── inference/            # HeterogeneousEngine, SharedExpertCache, DP, Tokenizer
+├── inference/            # HeterogeneousEngine, SharedExpertCache, DP, Tokenizer, batch scheduler, speculative, weight loader
 ├── tee/                  # Intel SGX (Gramine) + AMD SEV-SNP backends
-├── routing/              # GeoAwareMoERouter (haversine RTT + gate + dispatch)
+├── routing/              # GeoAwareMoERouter (haversine RTT + gate + dispatch), expert telemetry, cluster affinity
 ├── rpc/                  # gRPC proto, server/client, TLS, KV-cache transfer
 ├── network/              # AstraDHT, HivemindBridge, Orchestrator, RTT, Identity, Engram
-└── api/                  # OpenAI-compatible FastAPI + SPA dashboard
+├── api/                  # OpenAI-compatible FastAPI + SPA dashboard
+└── config/               # Model config, defaults
 
 mock_pipeline.py          # Phase 1 & 2 local simulation harness
-scripts/                  # run_node.py, run_cluster.py, check_env.py
+scripts/                  # run_node.py, run_cluster.py, check_env.py, benchmark.py, load_test.py
 installer/                # One-click installers (install.bat/.ps1/.sh, start.bat)
-tests/                    # 389 pytest tests + 1 skipped (all passing on CPU/NumPy CI)
+tests/                    # 498 pytest tests + 1 skipped (all passing on CPU/NumPy CI)
 docs/                     # ARCHITECTURE, ROADMAP, TESTING, INSTALL, SECURITY, etc.
 ```
 
@@ -160,8 +161,8 @@ docs/                     # ARCHITECTURE, ROADMAP, TESTING, INSTALL, SECURITY, e
 |-----|----------|
 | [docs/INSTALL.md](docs/INSTALL.md) | Per-platform installation guide |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | System design, data flow, wire format spec |
-| [docs/ROADMAP.md](docs/ROADMAP.md) | Phase-by-phase plan (Phase 1–6 ✓ · Phase 7 🔧 in progress — MiniMax-M2.5 validation) |
-| [docs/TESTING.md](docs/TESTING.md) | Test strategy: 389 tests + hardware test checklist |
+| [docs/ROADMAP.md](docs/ROADMAP.md) | Phase-by-phase plan (Phase 1–7 ✓ — MiniMax-M2.5 validation, continuous batching, speculative decoding, expert replication, weight loading, tokenizer) |
+| [docs/TESTING.md](docs/TESTING.md) | Test strategy: 498 tests + hardware test checklist |
 | [docs/SECURITY.md](docs/SECURITY.md) | mTLS, differential privacy, TEE attestation |
 | [docs/TEE.md](docs/TEE.md) | TEE deployment: Intel SGX (Gramine) & AMD SEV-SNP |
 | [docs/TLS.md](docs/TLS.md) | mTLS setup and configuration guide |
