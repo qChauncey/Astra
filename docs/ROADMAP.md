@@ -264,9 +264,14 @@ batching, speculative decoding, expert replication).
 |------|---------|--------|
 | Single-machine single-node | `python scripts/run_node.py --mode offline --gpu --api-port 8080` | 🟢 Active |
 | Single-machine multi-node mock (2-node gRPC) | `python mock_pipeline.py --phase 2` | 🟢 Active |
-| Full test suite (CPU CI) | `python -m pytest tests/ -v` | 507 passed, 3 failed, 1 skipped |
+| Full test suite (CPU CI) | `python -m pytest tests/ -v` | 510 passed, 0 failed, 1 skipped |
+| Real-weight lightweight verification (MiniMax-M2.5) | `scripts/verify_real_weights_small.py` | 🟢 Active (single shard, single layer) |
 | Hardware test workflow (GPU) | `hardware_test.yml` (4 jobs) | Pending self-hosted GPU runner |
 
+> `verify_real_weights_small.py` provides a lightweight real-weight verification path
+> (single shard, single layer) that validates ModelIndex, MmapWeightStore, GQA attention
+> tensors, MoE expert FP8 dequant, and RMS checks on one machine without full model load.
+>
 > Real-weight alignment (7.3.1) and continuous batching / speculative / expert replication
 > (7.3.2–7.3.4) are **software-complete and blocked on hardware** (require compiled
 > KTransformers + safetensors shards + ≥64 GB RAM for 284B MoE weights).

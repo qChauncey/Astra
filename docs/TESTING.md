@@ -6,11 +6,11 @@
 
 ## 1. 当前测试状态（诚实评估）
 
-### 1.1 已通过的自动化测试（507 个通过，3 失败，1 跳过，可在 CI 中运行）
+### 1.1 已通过的自动化测试（510 个通过，0 失败，1 跳过，可在 CI 中运行）
 
 ```
 python -m pytest tests/ -v
-# 507 passed, 3 failed, 1 skipped in ~29s（纯 CPU / NumPy 环境）
+# 510 passed, 0 failed, 1 skipped in ~29s（纯 CPU / NumPy 环境）
 ```
 
 | 测试文件 | 覆盖范围 | 测试数 |
@@ -42,8 +42,8 @@ python -m pytest tests/ -v
 
 ### 1.2 已填补的覆盖空缺（Phase 3–7 完成）
 
-所有在 Phase 1/2 标记为"待补充"的测试文件现已编写并纳入 CI 流水线。`test_heterogeneous.py`、`test_kv_transfer.py`、`test_api.py`、`test_differential_privacy.py`、`test_tee.py`、`test_tls.py`、`test_hivemind_bridge.py`、`test_phase6.py`、`test_identity.py`、`test_rtt.py`、`test_engram.py`、`test_weight_loader.py`、`test_weight_manifest.py`、`test_tokenizer.py`、`test_speculative.py`、`test_continuous_batching.py`、`test_expert_replication.py` 直接测试各自模块，共计 510 个测试（507 通过，3 失败，1 跳过）。
-（Phase 1/2: 168 + Phase 3: 84 + Phase 4: 33 + Phase 5: 30 + Phase 6: 25 + Phase 7: 170）
+所有在 Phase 1/2 标记为"待补充"的测试文件现已编写并纳入 CI 流水线。`test_heterogeneous.py`、`test_kv_transfer.py`、`test_api.py`、`test_differential_privacy.py`、`test_tee.py`、`test_tls.py`、`test_hivemind_bridge.py`、`test_phase6.py`、`test_identity.py`、`test_rtt.py`、`test_engram.py`、`test_weight_loader.py`、`test_weight_manifest.py`、`test_tokenizer.py`、`test_speculative.py`、`test_continuous_batching.py`、`test_expert_replication.py` 直接测试各自模块，共计 510 个测试（510 通过，0 失败，1 跳过）。
+（Phase 1/2: 168 + Phase 3: 84 + Phase 4: 33 + Phase 5: 30 + Phase 6: 45 + Phase 7: 150）
 
 #### 剩余覆盖空缺（待补充）
 
