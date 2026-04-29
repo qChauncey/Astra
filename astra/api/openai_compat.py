@@ -421,24 +421,32 @@ def create_app(
         max_input = min(len(token_ids), 32)
         token_ids = token_ids[:max_input]
 
-        # Run pipeline (or fall back gracefully if no peers available)
-        orchestrator = PipelineOrchestrator(
-            dht=raw.app.state.dht,
-            config=raw.app.state.pipeline_config,
-        )
-
+        # Route inference based on operating mode
+        mode = getattr(raw.app.state, "mode", "p2p")
         generated_ids: List[int] = []
         pipeline_error: Optional[str] = None
-        try:
-            orchestrator.run(token_ids, use_kv_cache=True)
-            # In a real system: sample from logits.  Here: produce dummy tokens.
+
+        if mode == "offline":
+            # Offline mode: skip pipeline validation — generate tokens directly
             n_out = min(req.max_tokens or 32, 32)
             rng = np.random.default_rng(seed=int(time.time()))
             generated_ids = rng.integers(1, 32000, size=n_out).tolist()
-        except Exception as exc:
-            pipeline_error = str(exc)
-            # Graceful degradation: still return a response with error note
-            generated_ids = [1]
+        else:
+            # P2P mode: validate pipeline availability via DHT orchestrator
+            orchestrator = PipelineOrchestrator(
+                dht=raw.app.state.dht,
+                config=raw.app.state.pipeline_config,
+            )
+            try:
+                orchestrator.run(token_ids, use_kv_cache=True)
+                # In a real system: sample from logits.  Here: produce dummy tokens.
+                n_out = min(req.max_tokens or 32, 32)
+                rng = np.random.default_rng(seed=int(time.time()))
+                generated_ids = rng.integers(1, 32000, size=n_out).tolist()
+            except Exception as exc:
+                pipeline_error = str(exc)
+                # Graceful degradation: still return a response with error note
+                generated_ids = [1]
 
         completion_text = _detokenize(generated_ids)
         if pipeline_error:

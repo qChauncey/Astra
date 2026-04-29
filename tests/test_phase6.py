@@ -416,6 +416,51 @@ class TestTokenSpeed:
 # Phase 8: /api/mode (get and set)                                    #
 # ══════════════════════════════════════════════════════════════════ #
 
+class TestOfflineChatRegression:
+    """Verify offline mode skips pipeline validation and succeeds."""
+
+    @pytest.fixture()
+    def offline_client(self):
+        """Return a TestClient created in offline mode with no peers."""
+        store = _GlobalStore()
+        dht = AstraDHT(node_id="test-offline-gateway", store=store)
+        app = create_app(dht=dht, mode="offline")
+        with TestClient(app, raise_server_exceptions=False) as c:
+            yield c
+
+    def test_offline_chat_returns_no_pipeline_error(self, offline_client):
+        resp = offline_client.post("/v1/chat/completions", json={
+            "model": "deepseek-v4-flash",
+            "messages": [{"role": "user", "content": "test offline"}],
+            "stream": False,
+            "max_tokens": 8,
+        })
+        assert resp.status_code == 200
+        body = resp.json()
+        assert "choices" in body
+        assert len(body["choices"]) == 1
+        content = body["choices"][0]["message"]["content"]
+        # The critical assertion: no pipeline error prefix
+        assert not content.startswith("[Pipeline error:"), f"unexpected error: {content}"
+        # Should have generated something non-empty
+        assert len(content) > 0
+
+    def test_offline_chat_with_stream(self, offline_client):
+        resp = offline_client.post("/v1/chat/completions", json={
+            "model": "deepseek-v4-flash",
+            "messages": [{"role": "user", "content": "streaming test"}],
+            "stream": True,
+            "max_tokens": 4,
+        })
+        assert resp.status_code == 200
+        # Collect streaming chunks
+        text = resp.text
+        assert "data: " in text
+        assert "[DONE]" in text
+        # No pipeline error in any chunk
+        assert "[Pipeline error:" not in text
+
+
 class TestMode:
     def test_get_mode_returns_json(self, client):
         resp = client.get("/api/mode")
