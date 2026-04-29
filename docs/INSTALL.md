@@ -54,30 +54,45 @@ git clone https://github.com/qchauncey/astra.git && cd astra
 pip install -e ".[proto]"
 pip install uvicorn   # Web UI 所需
 
-# 2. 检查环境 · Check environment
+# 2. 安装 CUDA Toolkit（GPU 推理必须）· Install CUDA Toolkit (required for GPU inference)
+#    Ubuntu 22.04/24.04:
+wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-keyring_1.1-1_all.deb
+sudo dpkg -i cuda-keyring_1.1-1_all.deb
+sudo apt-get update
+sudo apt-get install -y cuda-toolkit-12-6 build-essential cmake git
+
+# 3. 安装 PyTorch with CUDA · Install PyTorch with CUDA
+pip install torch --index-url https://download.pytorch.org/whl/cu126
+
+# 4. 编译 KTransformers GPU 内核 · Build KTransformers GPU kernels
+#    （每次新增推理节点时必须执行 · required for every new inference node）
+bash scripts/build_ktransformers.sh
+
+# 5. 检查环境 · Check environment
 python scripts/check_env.py
 
-# 3. 离线模式 — 单机，所有层本地，Web UI 端口 8080
-#    Opens a Claude-like chat interface at http://localhost:8080
+# 6. GPU 离线模式 — 单机，Web UI 端口 8080
+#    GPU Offline mode — single machine, Web UI on port 8080
 python scripts/run_node.py --mode offline --api-port 8080
 
-# 4. P2P 模式 — 贡献层切片到共享集群
+# 7. P2P 模式 — 贡献层切片到共享集群
 #    Contribute a layer slice to a shared cluster
 python scripts/run_node.py --node-id node-A --port 50051 \
     --layer-start 0 --layer-end 30 --hidden-dim 256 --api-port 8080
 
-# 5. GPU 模式（需要 CUDA + KTransformers）
+# 8. GPU 模式（需要 CUDA + KTransformers）
 #    GPU mode (requires CUDA + KTransformers)
 python scripts/run_node.py --node-id node-A --port 50051 \
     --layer-start 0 --layer-end 30 --gpu --api-port 8080
 
-# 6. 单机多节点集群（无需真实 GPU 即可验证完整 P2P 管线）
+# 9. 单机多节点集群（无需真实 GPU 即可验证完整 P2P 管线）
 #    Single-machine multi-node cluster (validates full P2P pipeline)
 python scripts/run_cluster.py --nodes 3 --hidden-dim 256 --validate-only
 python scripts/run_cluster.py --nodes 3 --hidden-dim 256 --api-port 8080
 ```
 
 > **存根说明：** 所有推理输出目前为随机 NumPy 数组。Web UI、流式、节点发现和 gRPC 管线功能完整 — 仅缺少模型权重（Phase 7）。
+> **Stub note:** All inference outputs are currently random NumPy arrays. Web UI, streaming, node discovery, and gRPC pipeline are fully functional — only model weights are missing (Phase 7).
 
 ---
 
@@ -175,7 +190,10 @@ wsl --install -d Ubuntu-22.04
 wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-keyring_1.1-1_all.deb
 sudo dpkg -i cuda-keyring_1.1-1_all.deb
 sudo apt-get update
-sudo apt-get install -y cuda-toolkit-12-4 build-essential python3-pip git
+sudo apt-get install -y cuda-toolkit-12-4 build-essential python3-pip git cmake
+
+# 编译 KTransformers CUDA 内核
+bash scripts/build_ktransformers.sh
 
 # 验证 GPU 可见
 nvidia-smi

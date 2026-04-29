@@ -44,6 +44,63 @@ echo "Installing Astra package ..."
 # ── Optional: uvicorn for API gateway / UI ────────────────────
 "$PIP" install uvicorn --quiet 2>/dev/null || true
 
+# ── KTransformers CUDA kernels (GPU inference) ───────────────────
+echo ""
+echo "------------------------------------------------------------"
+echo "  GPU inference: KTransformers CUDA kernels"
+echo "------------------------------------------------------------"
+echo ""
+
+HAS_NVCC=false
+command -v nvcc &>/dev/null && HAS_NVCC=true
+
+HAS_GPU=false
+if command -v nvidia-smi &>/dev/null && nvidia-smi &>/dev/null; then
+    HAS_GPU=true
+fi
+
+HAS_TORCH_CUDA=false
+if "$PYTHON_VENV" -c "import torch; assert torch.cuda.is_available()" 2>/dev/null; then
+    HAS_TORCH_CUDA=true
+fi
+
+if $HAS_GPU && $HAS_TORCH_CUDA; then
+    if $HAS_NVCC; then
+        echo "CUDA GPU detected with compiler — building KTransformers kernels ..."
+        echo "  (This may take 5–15 minutes, depending on your system)"
+        echo ""
+
+        KT_BUILD_SCRIPT="$REPO_ROOT/scripts/build_ktransformers.sh"
+        if [[ -f "$KT_BUILD_SCRIPT" ]]; then
+            if bash "$KT_BUILD_SCRIPT"; then
+                echo ""
+                echo "KTransformers CUDA kernels built successfully!"
+            else
+                echo ""
+                echo "WARNING: KTransformers build failed."
+                echo "  GPU inference will fall back to pure PyTorch (slower)."
+                echo "  Re-run later with: bash scripts/build_ktransformers.sh"
+            fi
+        else
+            echo "WARNING: Build script not found at $KT_BUILD_SCRIPT"
+            echo "  Skipping KTransformers build. GPU inference will use PyTorch fallback."
+        fi
+    else
+        echo "GPU detected but nvcc (CUDA compiler) not found."
+        echo "  Install CUDA Toolkit for full KTransformers performance:"
+        echo "    sudo apt-get install -y cuda-toolkit-12-6"
+        echo "  Then run: bash scripts/build_ktransformers.sh"
+        echo "  For now, GPU inference will use pure PyTorch (5–20× slower)."
+    fi
+elif $HAS_GPU && ! $HAS_TORCH_CUDA; then
+    echo "GPU detected but PyTorch CUDA not available."
+    echo "  Install PyTorch with CUDA: https://pytorch.org/get-started/locally/"
+    echo "  Then run: bash scripts/build_ktransformers.sh"
+else
+    echo "No GPU detected — skipping KTransformers build."
+    echo "  CPU-only inference (slower) or API gateway role."
+fi
+
 echo ""
 echo "============================================================"
 echo "  Installation complete!"
