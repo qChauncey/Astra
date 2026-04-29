@@ -47,9 +47,11 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import hmac
+import logging
 import os
 import pathlib
 import secrets
+import socket
 import time
 import uuid
 from typing import AsyncGenerator, Dict, List, Literal, Optional, Union
@@ -60,9 +62,11 @@ from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
+from ..inference.heterogeneous import DeviceMap
 from ..inference.tokenizer import get_tokenizer
-from ..network.dht import AstraDHT
+from ..network.dht import AstraDHT, DHTNodeRecord
 from ..network.orchestrator import PipelineConfig, PipelineOrchestrator
+from ..rpc.server import InferenceServer
 
 STATIC_DIR = pathlib.Path(__file__).parent / "static"
 
@@ -273,6 +277,8 @@ def create_app(
         version="0.1.0-alpha",
     )
 
+    _log = logging.getLogger("astra.api")
+
     # Runtime state attached to app
     app.state.dht = dht or AstraDHT(node_id="api-gateway")
     app.state.pipeline_config = pipeline_config or PipelineConfig()
@@ -280,6 +286,70 @@ def create_app(
     app.state.layer_start = layer_start
     app.state.layer_end = layer_end
     app.state.mode = mode
+
+    # Offline-local InferenceServer (started on-demand, registered in DHT)
+    app.state._offline_server: Optional[InferenceServer] = None
+    app.state._offline_port: int = 0
+
+    # ── Offline mode: self-register as a local pipeline peer ───────────
+    if mode == "offline":
+        try:
+            # Find an available port
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.bind(("127.0.0.1", 0))
+                app.state._offline_port = s.getsockname()[1]
+
+            pc = app.state.pipeline_config
+            num_layers = getattr(pc, "num_layers", 61)
+            hidden_dim = getattr(pc, "hidden_dim", 4096)
+
+            dmap = DeviceMap.cpu_only()
+
+            app.state._offline_server = InferenceServer(
+                node_id=f"{node_id}-local",
+                layer_start=0,
+                layer_end=num_layers,
+                port=app.state._offline_port,
+                geo_region="local",
+                device_map=dmap,
+                max_workers=4,
+            )
+            app.state._offline_server.start()
+            _log.info(
+                "Offline InferenceServer started on 127.0.0.1:%d (layers 0-%d)",
+                app.state._offline_port, num_layers,
+            )
+
+            # Register local server in DHT so orchestrator can discover it
+            record = DHTNodeRecord(
+                node_id=f"{node_id}-local",
+                address=f"127.0.0.1:{app.state._offline_port}",
+                layer_start=0,
+                layer_end=num_layers,
+                expert_shards=list(range(256)),
+                geo_region="local",
+                backend="numpy_stub",
+            )
+            app.state.dht.announce(record, ttl=3600)
+            _log.info("Offline node self-registered in DHT: %s", record.node_id)
+
+        except Exception as exc:
+            _log.exception("Failed to start offline InferenceServer: %s", exc)
+            app.state._offline_server = None
+
+    # ── Shutdown hook ──────────────────────────────────────────────────
+    @app.on_event("shutdown")
+    async def _shutdown():
+        srv: Optional[InferenceServer] = getattr(app.state, "_offline_server", None)
+        if srv is not None:
+            try:
+                srv.stop(grace=2.0)
+            except Exception:
+                pass
+            try:
+                app.state.dht.revoke()
+            except Exception:
+                pass
 
     # Serve static files (dashboard UI)
     if STATIC_DIR.is_dir():
@@ -495,6 +565,79 @@ def create_app(
                 content={"error": "mode must be 'offline' or 'p2p'"},
                 status_code=400,
             )
+
+        old_mode = raw.app.state.mode
+        if new_mode == old_mode:
+            return {"mode": new_mode}
+
+        # ── Switch to offline: start local InferenceServer + register in DHT ──
+        if new_mode == "offline":
+            try:
+                import socket
+                from ..inference.heterogeneous import DeviceMap
+                from ..rpc.server import InferenceServer
+                from ..network.dht import DHTNodeRecord
+
+                # Find an available port
+                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                    s.bind(("127.0.0.1", 0))
+                    raw.app.state._offline_port = s.getsockname()[1]
+
+                pc = raw.app.state.pipeline_config
+                num_layers = getattr(pc, "num_layers", 61)
+                node_id = raw.app.state.node_id
+
+                dmap = DeviceMap.cpu_only()
+                raw.app.state._offline_server = InferenceServer(
+                    node_id=f"{node_id}-local",
+                    layer_start=0,
+                    layer_end=num_layers,
+                    port=raw.app.state._offline_port,
+                    geo_region="local",
+                    device_map=dmap,
+                    max_workers=4,
+                )
+                raw.app.state._offline_server.start()
+                _log.info(
+                    "Offline InferenceServer started on 127.0.0.1:%d (layers 0-%d)",
+                    raw.app.state._offline_port, num_layers,
+                )
+
+                # Register local server in DHT so orchestrator can discover it
+                record = DHTNodeRecord(
+                    node_id=f"{node_id}-local",
+                    address=f"127.0.0.1:{raw.app.state._offline_port}",
+                    layer_start=0,
+                    layer_end=num_layers,
+                    expert_shards=list(range(256)),
+                    geo_region="local",
+                    backend="numpy_stub",
+                )
+                raw.app.state.dht.announce(record, ttl=3600)
+                _log.info("Offline node self-registered in DHT: %s", record.node_id)
+
+            except Exception as exc:
+                _log.exception("Failed to start offline InferenceServer: %s", exc)
+                raw.app.state._offline_server = None
+                return JSONResponse(
+                    content={"error": f"Failed to start offline server: {exc}"},
+                    status_code=500,
+                )
+
+        # ── Switch to p2p: stop local InferenceServer + revoke from DHT ──
+        elif new_mode == "p2p":
+            srv = getattr(raw.app.state, "_offline_server", None)
+            if srv is not None:
+                try:
+                    srv.stop(grace=2.0)
+                except Exception:
+                    pass
+                raw.app.state._offline_server = None
+            try:
+                raw.app.state.dht.revoke()
+            except Exception:
+                pass
+
         raw.app.state.mode = new_mode
         return {"mode": new_mode}
 
