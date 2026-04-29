@@ -264,7 +264,7 @@ batching, speculative decoding, expert replication).
 |------|---------|--------|
 | Single-machine single-node | `python scripts/run_node.py --mode offline --gpu --api-port 8080` | 🟢 Active |
 | Single-machine multi-node mock (2-node gRPC) | `python mock_pipeline.py --phase 2` | 🟢 Active |
-| Full test suite (CPU CI) | `python -m pytest tests/ -v` | 510 passed, 0 failed, 1 skipped |
+| Full test suite (CPU CI) | `python -m pytest tests/ -v` | 511 collected |
 | Real-weight lightweight verification (MiniMax-M2.5) | `scripts/verify_real_weights_small.py` | 🟢 Active (single shard, single layer) |
 | Hardware test workflow (GPU) | `hardware_test.yml` (4 jobs) | Pending self-hosted GPU runner |
 
@@ -462,7 +462,7 @@ sustainable decentralized inference network.
 
 | Layer | Tool | Current Status | Coverage Target |
 |-----|------|---------|---------|
-| Unit (CPU) | pytest | ✅ 486 passed + 3 skipped | Serialization, LRU cache, Haversine + real RTT, DHT, Engram, Peer Identity, Weight Manifest, gRPC TLS, HeterogeneousEngine, Tokenizer, KVTransfer, OpenAI API, Phase 6 dashboard, Continuous Batching, Speculative Decoding, Expert Replication, Weight Loader |
+| Unit (CPU) | pytest | ✅ 511 collected | Serialization, LRU cache, Haversine + real RTT, DHT, Engram, Peer Identity, Weight Manifest, gRPC TLS, HeterogeneousEngine, Tokenizer, KVTransfer, OpenAI API, Phase 6 dashboard, Continuous Batching, Speculative Decoding, Expert Replication, Weight Loader, Environment Checker |
 | Integration (local) | pytest + threading | ✅ Covered | mock_pipeline.py Phase 1 & 2 |
 | Hardware Integration | Self-hosted GPU Runner | ❌ Not configured | KTransformers C++ kernels, real-weight numerical alignment |
 | Load Test | scripts/load_test.py (asyncio+httpx) | ✅ Implemented | 100 concurrent requests, throughput & P99 latency |

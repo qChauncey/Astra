@@ -130,7 +130,7 @@ python mock_pipeline.py --phase 1 --seq-len 16 --hidden-dim 256
 # Phase 2 — 双节点 gRPC 流水线
 python mock_pipeline.py --phase 2 --seq-len 16 --hidden-dim 256
 
-# 完整测试套件（510 通过，0 失败，1 跳过，仅需 CPU）
+# 完整测试套件（511 收集项，仅需 CPU）
 python -m pytest tests/ -v
 ```
 
