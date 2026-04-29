@@ -10,7 +10,7 @@
 
 ```
 python -m pytest tests/ -v
-# 510 passed, 0 failed, 1 skipped in ~29s（纯 CPU / NumPy 环境）
+# 511 collected, 0 failed, 1 skipped in ~29s（纯 CPU / NumPy 环境）
 ```
 
 | 测试文件 | 覆盖范围 | 测试数 |
