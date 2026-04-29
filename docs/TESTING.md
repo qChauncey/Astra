@@ -1,16 +1,16 @@
 # Astra — 测试方案
 
-> 版本 0.2 · 2026 年 4 月 · Apache License 2.0
+> 版本 0.3 · 2026 年 4 月 · Apache License 2.0
 
 ---
 
 ## 1. 当前测试状态（诚实评估）
 
-### 1.1 已通过的自动化测试（430 个，可在 CI 中运行）
+### 1.1 已通过的自动化测试（507 个通过，3 失败，1 跳过，可在 CI 中运行）
 
 ```
 python -m pytest tests/ -v
-# 430 passed, 3 skipped in ~10s（纯 CPU / NumPy 环境）
+# 507 passed, 3 failed, 1 skipped in ~29s（纯 CPU / NumPy 环境）
 ```
 
 | 测试文件 | 覆盖范围 | 测试数 |
@@ -36,10 +36,14 @@ python -m pytest tests/ -v
 | `test_weight_loader.py` | ModelIndex 分片映射、WeightLoader 完整性校验、manifest 篡改检测、分片缓存 | 13 |
 | `test_weight_manifest.py` | WeightManifest 创建、哈希计算、保存/加载往返、篡改检测 | 18 |
 | `test_tokenizer.py` | AstraTokenizer 编码/解码、特殊 token、批处理、截断、加载工厂函数 | 23 |
+| `test_speculative.py` | SpeculativeDecoder 草稿生成、验收拒绝采样、KV 回滚、猜测长度配置、端到端推测解码 | 20 |
+| `test_continuous_batching.py` | BatchScheduler 请求入队/出队、FIFO 公平性、最大序列长度限制、batch 指标重置 | 33 |
+| `test_expert_replication.py` | ExpertReplicaManager 副本管理、负载感知路由、节点负载分数、健康检查、副本调度 | 33 |
 
-### 1.2 已填补的覆盖空缺（Phase 3–8 完成）
+### 1.2 已填补的覆盖空缺（Phase 3–7 完成）
 
-所有在 Phase 1/2 标记为"待补充"的测试文件现已编写并纳入 CI 流水线。`test_heterogeneous.py`、`test_kv_transfer.py`、`test_api.py`、`test_differential_privacy.py`、`test_tee.py`、`test_tls.py`、`test_hivemind_bridge.py`、`test_phase6.py`、`test_identity.py`、`test_rtt.py`、`test_engram.py`、`test_weight_loader.py`、`test_weight_manifest.py`、`test_tokenizer.py` 直接测试各自模块，共计 430 个测试（Phase 1/2: 168 + Phase 3: 84 + Phase 4: 33 + Phase 5: 30 + Phase 6: 25 + Phase 7: 85 + Phase 8: 20）。
+所有在 Phase 1/2 标记为"待补充"的测试文件现已编写并纳入 CI 流水线。`test_heterogeneous.py`、`test_kv_transfer.py`、`test_api.py`、`test_differential_privacy.py`、`test_tee.py`、`test_tls.py`、`test_hivemind_bridge.py`、`test_phase6.py`、`test_identity.py`、`test_rtt.py`、`test_engram.py`、`test_weight_loader.py`、`test_weight_manifest.py`、`test_tokenizer.py`、`test_speculative.py`、`test_continuous_batching.py`、`test_expert_replication.py` 直接测试各自模块，共计 510 个测试（507 通过，3 失败，1 跳过）。
+（Phase 1/2: 168 + Phase 3: 84 + Phase 4: 33 + Phase 5: 30 + Phase 6: 25 + Phase 7: 170）
 
 #### 剩余覆盖空缺（待补充）
 
@@ -47,6 +51,7 @@ python -m pytest tests/ -v
 |------|---------|------|
 | `scripts/run_node.py` | CLI 参数解析、环境变量绑定、信号处理 | 需要集成测试环境（非纯单元测试） |
 | `scripts/run_cluster.py` | 多进程启动、端口分配、清理逻辑 | 同上 |
+| `astra/inference/ktransformers_adapter.py` | KTransformers C++ 内核正确性、torch fallback vs C++ 数值可比对 | 需要 CUDA GPU + 编译好的 ktransformers |
 | `astra/tee/gramine.py` | SGX 硬件功能检测、manifest 生成、quote 获取 | 需要 Intel SGX 硬件 |
 | `astra/tee/amd_sev.py` | SEV-SNP 平台检测、attestation report 获取 | 需要 AMD EPYC SEV 硬件 |
 | `astra/rpc/tls.py` | 真实 TLS 证书链（非自签名）、CA 签发流程 | 需要 PKI 基础设施 |
@@ -61,7 +66,7 @@ python -m pytest tests/ -v
 | KTransformers C++ 内核正确性 | CUDA GPU + 编译好的 ktransformers | 与 NumPy 存根输出做数值对比 |
 | 真实 MLA 注意力数值精度 | torch + CUDA | 与 HuggingFace 参考实现对比（atol=1e-3） |
 | GPU/CPU 显存占用 | 16 GB VRAM + 64 GB RAM | `nvidia-smi` + `/proc/meminfo` 监控 |
-| DeepSeek-V4 权重加载 | 权重文件（safetensors）+ 512 GB 磁盘 | 对已知 prompt 的输出做 top-1 token 一致性检查 |
+| MiniMax-M2.5 真权推理 | 权重文件 + 126 GB 磁盘 | `scripts/smoke_kt_adapter.py` 端到端验证 |
 | 多机 gRPC 延迟基准 | 两台物理机 + 1 Gbps 网络 | 测量 RTT、吞吐量、P99 延迟 |
 | KV 缓存跨节点传输完整性 | 两节点集群 | 比对传输前后 K/V 张量的逐元素差值 |
 | TEE attestation 验证 | Intel SGX 或 AMD SEV-SNP 硬件 | 验证 quote 签名、measurement 匹配 |
@@ -178,7 +183,40 @@ class TestHivemindBridge:
     test_peer_heartbeat()                    # 心跳保活
 ```
 
-### 2.8 硬件集成测试（自托管 Runner，待配置）
+### 2.8 `test_speculative.py`（✅ 已完成 — Phase 7）
+
+```python
+class TestSpeculativeDecoder:
+    test_draft_generation_shape()            # 草稿 token 形状正确
+    test_acceptance_sampling()               # 验收拒绝采样逻辑
+    test_kv_rollback()                       # 拒绝后 KV cache 正确回滚
+    test_spec_len_configuration()            # 猜测长度可配置
+    test_end_to_end_speculative()            # 完整推测解码流程
+```
+
+### 2.9 `test_continuous_batching.py`（✅ 已完成 — Phase 7）
+
+```python
+class TestBatchScheduler:
+    test_enqueue_request()                   # 请求入队
+    test_dequeue_batch()                     # batch 出队
+    test_fifo_ordering()                     # FIFO 公平性
+    test_max_seq_len_limit()                 # 最大序列长度限制
+    test_reset_metrics()                     # batch 指标重置
+```
+
+### 2.10 `test_expert_replication.py`（✅ 已完成 — Phase 7）
+
+```python
+class TestExpertReplication:
+    test_replica_manager_creation()          # 副本管理器创建
+    test_register_replica()                  # 副本注册
+    test_load_aware_routing()                # 负载感知路由
+    test_node_load_score()                   # 节点负载分数计算
+    test_health_check()                      # 健康检查
+```
+
+### 2.11 硬件集成测试（自托管 Runner，待配置）
 
 ```yaml
 # .github/workflows/hardware_test.yml（待创建）
@@ -207,15 +245,17 @@ jobs:
 │  Layer 3: 端到端集成（本地双进程 gRPC）          │  ← PR 合并前
 │  mock_pipeline.py Phase 1 & 2 作为 pytest 用例  │
 ├─────────────────────────────────────────────────┤
-│  Layer 2: 组件集成（现有 430 个测试）            │  ← 每次 push
+│  Layer 2: 组件集成（现有 510 个测试）            │  ← 每次 push
 │  序列化 · gRPC · DHT · Orchestrator ·           │
 │  HeterogeneousEngine · KVTransfer · API · DP ·  │
-│  TEE · TLS · HivemindBridge · Phase6 · Phase8 · │
-│  Identity · RTT · Engram · WeightLoader         │
+│  TEE · TLS · HivemindBridge · Phase6 ·          │
+│  Identity · RTT · Engram · WeightLoader ·       │
+│  Speculative · ContinuousBatching ·             │
+│  ExpertReplication · Tokenizer · CheckEnv       │
 ├─────────────────────────────────────────────────┤
 │  Layer 1: 纯单元测试（✅ 已完成）                │  ← 每次 push
 │  HeterogeneousEngine · KVTransfer · API · DP ·  │
-│  TEE · TLS · Hivemind · Phase6 · Phase8         │
+│  TEE · TLS · Hivemind · Phase6 · Phase7         │
 └─────────────────────────────────────────────────┘
 ```
 
@@ -248,8 +288,8 @@ python -m pytest tests/test_hivemind_bridge.py -v
 # 运行 Phase 6 测试
 python -m pytest tests/test_phase6.py -v
 
-# 运行 Phase 8 测试
-python -m pytest tests/test_phase6.py -v -k "Phase8"
+# 运行 Phase 7 测试（推理引擎）
+python -m pytest tests/test_speculative.py tests/test_continuous_batching.py tests/test_expert_replication.py -v
 
 # 运行 mock pipeline 模拟（Phase 1 & 2 端到端脚本，非 pytest）
 python mock_pipeline.py --phase 1 --seq-len 16 --hidden-dim 256
