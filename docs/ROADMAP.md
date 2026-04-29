@@ -256,6 +256,21 @@ batching, speculative decoding, expert replication).
 | Intel SGX quote verification | Test | Intel SGX CPU + PCCS service; run `GramineBackend.attest()` |
 | AMD SEV-SNP attestation report validation | Test | AMD EPYC Milan/Genoa + SEV-SNP firmware; run `SevBackend.attest()` |
 
+#### 7.2.5 Single-Machine Development Mode (Current)
+> Multi-machine deployment is **deferred** (code complete, needs ≥2 GPU nodes).
+> The project is actively developed and tested in single-machine simulation:
+
+| Mode | Command | Status |
+|------|---------|--------|
+| Single-machine single-node | `python scripts/run_node.py --mode offline --gpu --api-port 8080` | 🟢 Active |
+| Single-machine multi-node mock (2-node gRPC) | `python mock_pipeline.py --phase 2` | 🟢 Active |
+| Full test suite (CPU CI) | `python -m pytest tests/ -v` | 507 passed, 3 failed, 1 skipped |
+| Hardware test workflow (GPU) | `hardware_test.yml` (4 jobs) | Pending self-hosted GPU runner |
+
+> Real-weight alignment (7.3.1) and continuous batching / speculative / expert replication
+> (7.3.2–7.3.4) are **software-complete and blocked on hardware** (require compiled
+> KTransformers + safetensors shards + ≥64 GB RAM for 284B MoE weights).
+
 ---
 
 ### 7.3 New Code Required 🔒 Hardware-Blocked

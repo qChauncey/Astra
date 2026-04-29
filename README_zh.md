@@ -147,6 +147,84 @@ python scripts/smoke_kt_adapter.py
 python scripts/run_node.py --mode offline --gpu --api-port 8080
 ```
 
+## Phase 7 — 硬件验证登记 ✅
+
+> **最近验证时间：** 2026-04-29 · **当前节点：**`API GATEWAY` · **角色：** 控制平面 / 路由
+>
+> Phase 7 所有软件交付物已全部完成并通过测试（128 项测试，100% 通过）。
+> 多机部署验证暂缓；单机模拟和单机多节点 mock 模式为当前活跃开发模式。
+
+### 7.1 单机硬件基线（已验证）
+
+| 检查项 | 状态 | 详情 |
+|--------|------|------|
+| Python | ✅ 3.14.4 | |
+| PyTorch + CUDA | ✅ PASS | 2.12.0.dev+cu128, cuda=True, devices=1 |
+| GPU (nvidia-smi) | ✅ PASS | **NVIDIA GeForce RTX 5070 Ti Laptop GPU** · 12 GB VRAM · 驱动 586.19 |
+| 磁盘 / NVMe | ✅ PASS | 1.84 TB（190 GB 可用）|
+| astra 包 | ✅ PASS | v0.1.0-alpha，所有子模块可导入 |
+| 差分隐私（`DPController`）| ✅ PASS | dp_noise 测试：4/4 |
+
+### 7.2 KTransformers 集成冒烟测试（在 RTX 5070 Ti 上验证）
+
+| 操作 | 结果 | 形状 | 数据类型 | 备注 |
+|------|------|------|----------|------|
+| `detect_ktransformers` | available=True | — | — | C++ 库未安装；使用 `torch_fallback` |
+| MLA（多头潜在注意力）| ✅ PASS | (2,4,256) | float16 | 无 NaN |
+| RMSNorm | ✅ PASS | (4,512) | float32 | |
+| RoPE | ✅ PASS | (8,64) | float16 | |
+| matmul | ✅ PASS | (3,64) | — | |
+
+### 7.3 Mock Pipeline 端到端验证
+
+| 阶段 | 内容 | 结果 |
+|------|------|------|
+| **Phase 1** | TensorPack → MoE Gate → HeterogeneousEngine（3 层，专家缓存 4/4）| ✅ PASS（3.4 毫秒）|
+| **Phase 2** | 节点-A :50051 ↔ 节点-B :50052 双节点 gRPC 流水线 | ✅ PASS（RTT 约 1066 毫秒 / 1004 毫秒）|
+
+### 7.4 基准测试参考值（单节点、模拟权重）
+
+| 指标 | 值 |
+|------|-----|
+| seq_len | 32 |
+| hidden_dim | 256 |
+| 计时运行次数 | 5（0 错误）|
+| P50 延迟 | 0.01 ms |
+| P95 延迟 | 0.02 ms |
+| 吞吐量 | 2,278,551 tokens/s |
+| 错误率 | 0.0% |
+
+### 7.5 真实权重工具链（预置就绪）
+
+| 脚本 / 模块 | 状态 |
+|-------------|------|
+| `astra/inference/weight_loader.py`（1062 行）| ✅ 13 项测试通过 |
+| `astra/inference/weight_manifest.py`（SHA-256 清单）| ✅ 11 项测试通过 |
+| `scripts/deploy_real_weights.py` | ✅ 语法正确；需要 ≥64 GB RAM + safetensors 分片 |
+| `scripts/verify_minimax_m2.py` | ✅ 可运行；权重缺失时优雅跳过 |
+| `scripts/load_test.py` | ✅ 语法正确；HTTP 压测工具 |
+
+### 7.6 CI 覆盖
+
+| 工作流 | 覆盖 |
+|--------|------|
+| `.github/workflows/ci.yml` | Phase 1–6 回归测试（仅 CPU） |
+| `.github/workflows/hardware_test.yml` | 4 个 job：环境检查、冒烟测试、基准测试、性能阈值；需要 GPU |
+
+### 7.7 已知限制与后续步骤
+
+| 项 | 状态 | 计划 |
+|-----|------|------|
+| KTransformers C++ 绑定 | ⚠️ 未安装 | 当可用时，为 RTX 5070 Ti（CUDA 架构 sm_120）编译带 MiniMax-M2.5 safetensors 分片的 `ktransformers` |
+| 系统 RAM（31.5 GB）| ⚠️ 低于 64 GB 阈值 | 无法本地加载 284B MoE 权重；使用单机模拟模式 |
+| 多机部署 | 🔒 暂缓 | 代码已全部完成（gRPC、TLS、DHT、hivemind）；需 ≥2 台 GPU 节点进行验证 |
+| 真实权重对齐（7.3.1 前提条件）| 🔒 阻塞 | 需要已编译的 KTransformers + safetensors 分片 |
+| 连续批处理 / 投机解码 / 专家复制（7.3.2–7.3.4）| ✅ 软件完成，🔒 硬件阻塞 | 86 项测试通过；需真实模型流量进行校准 |
+| 单机多节点模拟 | 🟢 活跃 | `mock_pipeline.py --phase 2` 在一台机器上运行两个节点进程 |
+
+> **开发模式：** 在多机硬件就绪之前，单机单节点（`run_node.py --mode offline`）和
+> 单机多节点模拟（`mock_pipeline.py --phase 2`）是主要开发工作流。
+
 ---
 
 ## 项目结构

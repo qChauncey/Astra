@@ -147,6 +147,86 @@ python scripts/smoke_kt_adapter.py
 python scripts/run_node.py --mode offline --gpu --api-port 8080
 ```
 
+## Phase 7 — Hardware Verification Registry ✅
+
+> **Last verified:** 2026-04-29 · **Node:** `API GATEWAY` · **Role:** control plane / routing
+> 
+> All software deliverables for Phase 7 are complete and tested (128 test items, 100% pass).
+> Multi-machine deployment verification is deferred; single-machine simulation and
+> single-machine multi-node mock are active for development.
+
+### 7.1 Single-Node Hardware Baseline (Verified)
+
+| Check | Status | Detail |
+|-------|--------|--------|
+| Python | ✅ 3.14.4 | |
+| PyTorch + CUDA | ✅ PASS | 2.12.0.dev+cu128, cuda=True, devices=1 |
+| GPU (nvidia-smi) | ✅ PASS | **NVIDIA GeForce RTX 5070 Ti Laptop GPU** · 12 GB VRAM · driver 586.19 |
+| Disk / NVMe | ✅ PASS | 1.84 TB (190 GB free) |
+| astra package | ✅ PASS | v0.1.0-alpha, all submodules importable |
+| Diff. privacy (`DPController`) | ✅ PASS | dp_noise tests: 4/4 |
+
+### 7.2 KTransformers Integration Smoke Test (Verified on RTX 5070 Ti)
+
+| Op | Result | Shape | Dtype | Note |
+|----|--------|-------|-------|------|
+| `detect_ktransformers` | available=True | — | — | C++ lib not installed; `torch_fallback` active |
+| MLA (multi-head latent attention) | ✅ PASS | (2,4,256) | float16 | no NaN |
+| RMSNorm | ✅ PASS | (4,512) | float32 | |
+| RoPE | ✅ PASS | (8,64) | float16 | |
+| matmul | ✅ PASS | (3,64) | — | |
+
+### 7.3 Mock Pipeline End-to-End
+
+| Phase | Content | Result |
+|-------|---------|--------|
+| **Phase 1** | TensorPack → MoE Gate → HeterogeneousEngine (3 layers, expert cache 4/4) | ✅ PASS (3.4 ms) |
+| **Phase 2** | Node-A :50051 ↔ Node-B :50052 dual-node gRPC | ✅ PASS (RTT ~1 066 ms / 1 004 ms) |
+
+### 7.4 Benchmark Reference (Single-Node, Mock Weights)
+
+| Metric | Value |
+|--------|-------|
+| seq_len | 32 |
+| hidden_dim | 256 |
+| timed runs | 5 (0 errors) |
+| P50 latency | 0.01 ms |
+| P95 latency | 0.02 ms |
+| Throughput | 2,278,551 tokens/s |
+| Error rate | 0.0% |
+
+### 7.5 Real-Weight Toolchain (Pre-Staged)
+
+| Script / Module | Status |
+|-----------------|--------|
+| `astra/inference/weight_loader.py` (1 062 lines) | ✅ 13 tests passing |
+| `astra/inference/weight_manifest.py` (SHA-256 manifest) | ✅ 11 tests passing |
+| `scripts/deploy_real_weights.py` | ✅ Syntax OK; requires 64+ GB RAM + safetensors shards |
+| `scripts/verify_minimax_m2.py` | ✅ Runs; graceful skip when weights absent |
+| `scripts/load_test.py` | ✅ Syntax OK; HTTP load generation tool |
+
+### 7.6 CI Coverage
+
+| Workflow | Coverage |
+|----------|----------|
+| `.github/workflows/ci.yml` | Phase 1–6 regression (CPU-only) |
+| `.github/workflows/hardware_test.yml` | 4 jobs: env check, smoke, benchmark, performance threshold; GPU-required |
+
+### 7.7 Known Limitations & Next Steps
+
+| Item | Status | Plan |
+|------|--------|------|
+| KTransformers C++ binding | ⚠️ Not installed | Compile `ktransformers` for RTX 5070 Ti (CUDA arch sm_120) with MiniMax-M2.5 safetensors shards when available |
+| System RAM (31.5 GB) | ⚠️ Below 64 GB threshold | Cannot load 284B MoE weights locally; use single-machine simulation |
+| Multi-machine deployment | 🔒 Deferred | Code complete (gRPC, TLS, DHT, hivemind); needs ≥2 GPU nodes for verification |
+| Real-weight alignment (7.3.1 prerequisite) | 🔒 Blocked | Requires compiled KTransformers + safetensors shards |
+| Continuous batching / speculative / expert replication (7.3.2–7.3.4) | ✅ Software complete, 🔒 Blocked on hardware | 86 tests passing; needs real model traffic for calibration |
+| Single-machine multi-node mock | 🟢 Active | `mock_pipeline.py --phase 2` runs two node processes on one machine |
+
+> **Development mode:** Single-machine single-node (`run_node.py --mode offline`) and
+> single-machine multi-node mock (`mock_pipeline.py --phase 2`) are the primary
+> development workflows until multi-machine hardware is available.
+
 ---
 
 ## Project Layout
