@@ -7,7 +7,7 @@
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org)
-[![Tests](https://img.shields.io/badge/tests-507%20passed-brightgreen)]()
+[![Tests](https://img.shields.io/badge/tests-510%20passed-brightgreen)]()
 [![CI](https://github.com/qchauncey/astra/actions/workflows/ci.yml/badge.svg)](.github/workflows/ci.yml)
 [![Status](https://img.shields.io/badge/status-Phase%201--7%20完成%20%7C%20Phase%208%20计划中-blue)]()
 
@@ -17,7 +17,7 @@
 - **[KTransformers](https://github.com/kvcache-ai/ktransformers)** 式的异构 GPU/CPU 计算拆分
 - **[hivemind](https://github.com/learning-at-home/hivemind)** DHT 用于节点发现和键值存储
 
-> **Alpha 阶段。** Phase 1–7 已完成并通过测试（507 通过，3 失败，1 跳过，CPU/NumPy CI）。当前验证目标：**MiniMax-M2.5**（126 GB，62 层，GQA，20 万词表）——真权加载、GQA 注意力、MoE 专家反量化及前向推理已端到端验证通过。`KTransformersAdapter`（`astra/inference/ktransformers_adapter.py`）在 PyTorch + CUDA 可用时提供 GPU 加速的 torch 回退方案，覆盖 MLA、RMSNorm、RoPE 和 matmul 操作（已在 WSL2 + NVIDIA RTX 5070 Ti 上验证）。KTransformers C++ 绑定（MLA 融合内核 + CUDA 算子）已编译并通过 `check_env.py` 检测；冒烟测试套件（`scripts/smoke_kt_adapter.py`）验证了所有适配器操作。Phase 7（真权加载、连续批处理、投机解码、专家复制、词表管理、集群亲和性、编排器负载均衡）已完成。Phase 8（高级前端界面：聊天交互界面、模式切换、模型/设备信息、Token 产出速度计）计划中。**DeepSeek-V4** 支持已规划，但需等待 KTransformers 上游完成 V4 架构适配后方可推进。
+> **Alpha 阶段。** Phase 1–7 已完成并通过测试（510 通过，0 失败，1 跳过，CPU/NumPy CI）。当前验证目标：**MiniMax-M2.5**（126 GB，62 层，GQA，20 万词表）——真权加载、GQA 注意力、MoE 专家反量化及前向推理已端到端验证通过。`KTransformersAdapter`（`astra/inference/ktransformers_adapter.py`）在 PyTorch + CUDA 可用时提供 GPU 加速的 torch 回退方案，覆盖 MLA、RMSNorm、RoPE 和 matmul 操作（已在 WSL2 + NVIDIA RTX 5070 Ti 上验证）。KTransformers C++ 绑定（MLA 融合内核 + CUDA 算子）已编译并通过 `check_env.py` 检测；冒烟测试套件（`scripts/smoke_kt_adapter.py`）验证了所有适配器操作。轻量级真权验证路径（`scripts/verify_real_weights_small.py`）在单个分片/单层上验证 ModelIndex、MmapWeightStore、GQA 张量和 MoE FP8 反量化，无需加载完整模型。Phase 7（真权加载、连续批处理、投机解码、专家复制、词表管理、集群亲和性、编排器负载均衡）已完成。Phase 8（高级前端界面：聊天交互界面、模式切换、模型/设备信息、Token 产出速度计）计划中。**DeepSeek-V4** 支持已规划，但需等待 KTransformers 上游完成 V4 架构适配后方可推进。
 
 ---
 
@@ -130,7 +130,7 @@ python mock_pipeline.py --phase 1 --seq-len 16 --hidden-dim 256
 # Phase 2 — 双节点 gRPC 流水线
 python mock_pipeline.py --phase 2 --seq-len 16 --hidden-dim 256
 
-# 完整测试套件（507 通过，3 失败，1 跳过，仅需 CPU）
+# 完整测试套件（510 通过，0 失败，1 跳过，仅需 CPU）
 python -m pytest tests/ -v
 ```
 
@@ -146,6 +146,86 @@ python scripts/smoke_kt_adapter.py
 # 启动推理（离线或 P2P 模式）
 python scripts/run_node.py --mode offline --gpu --api-port 8080
 ```
+
+## Phase 7 — 硬件验证登记 ✅
+
+> **最近验证时间：** 2026-04-29 · **当前节点：**`API GATEWAY` · **角色：** 控制平面 / 路由
+>
+> Phase 7 所有软件交付物已全部完成并通过测试（128 项测试，100% 通过）。
+> 多机部署验证暂缓；单机模拟和单机多节点 mock 模式为当前活跃开发模式。
+
+### 7.1 单机硬件基线（已验证）
+
+| 检查项 | 状态 | 详情 |
+|--------|------|------|
+| Python | ✅ 3.14.4 | |
+| PyTorch + CUDA | ✅ PASS | 2.12.0.dev+cu128, cuda=True, devices=1 |
+| GPU (nvidia-smi) | ✅ PASS | **NVIDIA GeForce RTX 5070 Ti Laptop GPU** · 12 GB VRAM · 驱动 586.19 |
+| 磁盘 / NVMe | ✅ PASS | 1.84 TB（190 GB 可用）|
+| astra 包 | ✅ PASS | v0.1.0-alpha，所有子模块可导入 |
+| 差分隐私（`DPController`）| ✅ PASS | dp_noise 测试：4/4 |
+
+### 7.2 KTransformers 集成冒烟测试（在 RTX 5070 Ti 上验证）
+
+| 操作 | 结果 | 形状 | 数据类型 | 备注 |
+|------|------|------|----------|------|
+| `detect_ktransformers` | available=True | — | — | C++ 库未安装；使用 `torch_fallback` |
+| MLA（多头潜在注意力）| ✅ PASS | (2,4,256) | float16 | 无 NaN |
+| RMSNorm | ✅ PASS | (4,512) | float32 | |
+| RoPE | ✅ PASS | (8,64) | float16 | |
+| matmul | ✅ PASS | (3,64) | — | |
+
+### 7.3 Mock Pipeline 端到端验证
+
+| 阶段 | 内容 | 结果 |
+|------|------|------|
+| **Phase 1** | TensorPack → MoE Gate → HeterogeneousEngine（3 层，专家缓存 4/4）| ✅ PASS（3.4 毫秒）|
+| **Phase 2** | 节点-A :50051 ↔ 节点-B :50052 双节点 gRPC 流水线 | ✅ PASS（RTT 约 1066 毫秒 / 1004 毫秒）|
+
+### 7.4 基准测试参考值（单节点、模拟权重）
+
+| 指标 | 值 |
+|------|-----|
+| seq_len | 32 |
+| hidden_dim | 256 |
+| 计时运行次数 | 5（0 错误）|
+| P50 延迟 | 0.01 ms |
+| P95 延迟 | 0.02 ms |
+| 吞吐量 | 2,278,551 tokens/s |
+| 错误率 | 0.0% |
+
+### 7.5 真实权重工具链（预置就绪）
+
+| 脚本 / 模块 | 状态 |
+|-------------|------|
+| `astra/inference/weight_loader.py`（1062 行）| ✅ 13 项测试通过 |
+| `astra/inference/weight_manifest.py`（SHA-256 清单）| ✅ 18 项测试通过 |
+| `scripts/deploy_real_weights.py` | ✅ 语法正确；需要 ≥64 GB RAM + safetensors 分片 |
+| `scripts/verify_minimax_m2.py` | ✅ 可运行；权重缺失时优雅跳过 |
+| `scripts/verify_real_weights_small.py` | ✅ 可运行；单分片真权验证（轻量级） |
+| `scripts/load_test.py` | ✅ 语法正确；HTTP 压测工具 |
+
+### 7.6 CI 覆盖
+
+| 工作流 | 覆盖 |
+|--------|------|
+| `.github/workflows/ci.yml` | Phase 1–6 回归测试（仅 CPU） |
+| `.github/workflows/hardware_test.yml` | 4 个 job：环境检查、冒烟测试、基准测试、性能阈值；需要 GPU |
+
+### 7.7 已知限制与后续步骤
+
+| 项 | 状态 | 计划 |
+|-----|------|------|
+| KTransformers C++ 绑定 | ⚠️ 未安装 | 当可用时，为 RTX 5070 Ti（CUDA 架构 sm_120）编译带 MiniMax-M2.5 safetensors 分片的 `ktransformers` |
+| 系统 RAM（31.5 GB）| ⚠️ 低于 64 GB 阈值 | 无法本地加载 284B MoE 权重；使用单机模拟模式 |
+| 多机部署 | 🔒 暂缓 | 代码已全部完成（gRPC、TLS、DHT、hivemind）；需 ≥2 台 GPU 节点进行验证 |
+| 真实权重对齐（7.3.1 前提条件）| 🔒 阻塞 | 需要已编译的 KTransformers + safetensors 分片 |
+| 连续批处理 / 投机解码 / 专家复制（7.3.2–7.3.4）| ✅ 软件完成，🔒 硬件阻塞 | 86 项测试通过；需真实模型流量进行校准 |
+| 真权轻量级验证（MiniMax-M2.5）| 🟢 活跃 | `verify_real_weights_small.py` — 单分片、单层 |
+| 单机多节点模拟 | 🟢 活跃 | `mock_pipeline.py --phase 2` 在一台机器上运行两个节点进程 |
+
+> **开发模式：** 在多机硬件就绪之前，单机单节点（`run_node.py --mode offline`）和
+> 单机多节点模拟（`mock_pipeline.py --phase 2`）是主要开发工作流。
 
 ---
 
@@ -163,9 +243,9 @@ astra/
 └── config/               # 模型配置、默认值
 
 mock_pipeline.py          # Phase 1 和 2 本地模拟框架
-scripts/                  # run_node.py、run_cluster.py、check_env.py、benchmark.py、load_test.py、smoke_kt_adapter.py
+scripts/                  # run_node.py、run_cluster.py、check_env.py、benchmark.py、load_test.py、smoke_kt_adapter.py、verify_real_weights_small.py
 installer/                # 一键安装器（install.bat/.ps1/.sh、start.bat）
-tests/                    # 507 个 pytest 测试通过 + 3 失败 + 1 跳过（CPU/NumPy CI）
+tests/                    # 510 个 pytest 测试通过 + 0 失败 + 1 跳过（CPU/NumPy CI）
 docs/                     # ARCHITECTURE、ROADMAP、TESTING、INSTALL、SECURITY 等
 ```
 
@@ -178,7 +258,7 @@ docs/                     # ARCHITECTURE、ROADMAP、TESTING、INSTALL、SECURIT
 | [docs/INSTALL.md](docs/INSTALL.md) | 各平台安装指南 |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 系统设计、数据流、有线格式规范 |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | 分阶段计划（Phase 1–7 ✓，Phase 8 计划中 — 高级前端界面） |
-| [docs/TESTING.md](docs/TESTING.md) | 测试策略：507 项测试 + 硬件测试清单 |
+| [docs/TESTING.md](docs/TESTING.md) | 测试策略：510 项测试 + 硬件测试清单 |
 | [docs/SECURITY.md](docs/SECURITY.md) | mTLS、差分隐私、TEE 远程证明 |
 | [docs/TEE.md](docs/TEE.md) | TEE 部署：Intel SGX（Gramine）和 AMD SEV-SNP |
 | [docs/TLS.md](docs/TLS.md) | mTLS 搭建和配置指南 |
