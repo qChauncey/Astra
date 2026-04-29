@@ -17,8 +17,10 @@ cffi>=1.16.0                  # cryptography Rust backend dependency
 # torch>=2.2.0                 # install from https://pytorch.org
 # torchvision>=0.17.0
 
-# ── Optional: KTransformers heterogeneous C++ kernels ────────────────────────
-# ktransformers>=0.2.0         # build from https://github.com/kvcache-ai/ktransformers
+# ── Required for GPU inference: KTransformers heterogeneous C++ kernels ───────
+# Do NOT pip install ktransformers directly. Build from source with:
+#     bash scripts/build_ktransformers.sh
+# See docs/INSTALL.md for full GPU setup instructions.
 
 # ── Optional: P2P DHT node discovery (Phase 3) ───────────────────────────────
 # hivemind>=1.1.0              # pip install hivemind
