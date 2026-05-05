@@ -1,6 +1,6 @@
 # Astra — Implementation Roadmap
 
-> Version 0.2 · April 2026 · Apache License 2.0
+> Version 0.3 · April 2026 · Apache License 2.0
 
 ---
 
@@ -208,7 +208,7 @@ authentication, weight integrity, and storage/compute role separation.
 | Real-time compute / VRAM / RTT monitoring (`/api/monitor`) | ✓ Done | `astra/api/openai_compat.py` — live Ping aggregation |
 | Decentralized challenge-response login (`/api/login`) | ✓ Done | `astra/api/openai_compat.py` — HMAC-SHA256 nonce-based |
 | Contributor earnings / token accounting (`/api/earnings`) | ✓ Done | `astra/api/openai_compat.py` — in-process ledger |
-| Phase 6 unit tests (25 items) | ✓ Done | `tests/test_phase6.py` |
+| Phase 6 unit tests (45 items) | ✓ Done | `tests/test_phase6.py` |
 
 ---
 
@@ -279,7 +279,7 @@ batching, speculative decoding, expert replication).
 
 ---
 
-### 7.3 New Code Required 🔒 Hardware-Blocked
+### 7.3 Software-Complete (Hardware-Blocked for Validation Only) 🔒 Hardware-Blocked
 > These items need new software. Hardware is needed both to guide design
 > decisions (latency thresholds, batch sizes, expert frequencies) and to
 > validate the implementation once built.
