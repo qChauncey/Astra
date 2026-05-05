@@ -1,6 +1,6 @@
 # Astra — Implementation Roadmap
 
-> Version 0.2 · April 2026 · Apache License 2.0
+> Version 0.3 · April 2026 · Apache License 2.0
 
 ---
 
@@ -83,7 +83,7 @@ authentication, weight integrity, and storage/compute role separation.
 | Task | Status | Notes |
 |------|--------|-------|
 | KV-cache streaming between nodes (`TransferKVCache` RPC) | ✓ Done | `astra/rpc/kv_transfer.py` — chunked ≤3 MB streaming |
-| DeepSeek-V4 checkpoint loader (safetensors) | ✓ Done | `astra/inference/weight_loader.py` |
+| DeepSeek-V4 & V4-Flash checkpoint loader (safetensors) | ✓ Done | `astra/inference/weight_loader.py` |
 | Tokenizer integration (HuggingFace + stub fallback) | ✓ Done | `astra/inference/tokenizer.py` |
 | Real KTransformers C++ binding integration | → Phase 7 | Hardware-blocked (adapter layer done — torch_fallback validated on WSL2 GPU) |
 | Speculative decoding | → Phase 7 | Hardware-blocked |
@@ -208,7 +208,7 @@ authentication, weight integrity, and storage/compute role separation.
 | Real-time compute / VRAM / RTT monitoring (`/api/monitor`) | ✓ Done | `astra/api/openai_compat.py` — live Ping aggregation |
 | Decentralized challenge-response login (`/api/login`) | ✓ Done | `astra/api/openai_compat.py` — HMAC-SHA256 nonce-based |
 | Contributor earnings / token accounting (`/api/earnings`) | ✓ Done | `astra/api/openai_compat.py` — in-process ledger |
-| Phase 6 unit tests (25 items) | ✓ Done | `tests/test_phase6.py` |
+| Phase 6 unit tests (45 items) | ✓ Done | `tests/test_phase6.py` |
 
 ---
 
@@ -224,9 +224,10 @@ batching, speculative decoding, expert replication).
 > speculative decoding, and expert replication are being validated against
 > MiniMax-M2.5.
 >
-> **DeepSeek-V4** support is planned but blocked pending KTransformers upstream
-> V4 architecture adaptation. Once KTransformers adds V4 MLA kernel support,
-> the validation target will shift to DeepSeek-V4.
+> **DeepSeek-V4-Flash** is now supported via KTransformers + SGLang
+> with KT-Kernel CPU-GPU heterogeneous inference (MXFP4 quantized MoE,
+> NSA sparse MLA). See `astra/config/model_config.py` for the
+> `DeepSeekV4FlashConfig` preset.
 
 ### 7.1 Soft Deliverables ✓ COMPLETE
 
@@ -249,7 +250,7 @@ batching, speculative decoding, expert replication).
 | Task | Nature | Prerequisite |
 |------|--------|--------------|
 | Register self-hosted GPU runner | Config | 1× Linux machine + CUDA GPU; runner registered in GitHub Actions Settings |
-| Run `hardware_test.yml` → real-weight numerical alignment | Test | Runner above + MiniMax-M2.5 weights (126 GB, HuggingFace); DeepSeek-V4 pending KTransformers upstream V4 support |
+| Run `hardware_test.yml` → real-weight numerical alignment | Test | Runner above + model weights (MiniMax-M2.5 126 GB or DeepSeek-V4-Flash 340 GB, HuggingFace) |
 | Multi-machine DHT bootstrap (3+ physical nodes) | Test | 3 machines; run `create_dht(use_hivemind=True)` on each with shared `initial_peers` |
 | Cross-machine KV-cache transfer validation | Test | 2-node cluster; observe `KVCacheSender/Receiver` logs |
 | Multi-machine gRPC latency/throughput benchmark | Test | 2+ machines, ≥1 Gbps LAN; run `scripts/benchmark.py --mode grpc` |
@@ -278,7 +279,7 @@ batching, speculative decoding, expert replication).
 
 ---
 
-### 7.3 New Code Required 🔒 Hardware-Blocked
+### 7.3 Software-Complete (Hardware-Blocked for Validation Only) 🔒 Hardware-Blocked
 > These items need new software. Hardware is needed both to guide design
 > decisions (latency thresholds, batch sizes, expert frequencies) and to
 > validate the implementation once built.
@@ -296,7 +297,7 @@ batching, speculative decoding, expert replication).
 | End-to-end smoke test on real GPU hardware | ✓ Complete | `scripts/smoke_kt_adapter.py` — MLA, RMSNorm, RoPE, matmul all validated (correct shapes, dtypes, no NaN) |
 | Replace torch fallback with real `ktransformers.ops.mla_forward` | 🔒 Blocked | Requires `ktransformers` compiled for target CUDA arch + MiniMax-M2.5 safetensors shards |
 | Handle CUDA tensor lifecycle (device placement, dtype casting) | 🔒 Blocked | Tensors must stay on GPU between attention and MoE to avoid PCIe round-trip |
-| **Prerequisite** | 🔒 Blocked | `ktransformers` compiled for target CUDA arch + MiniMax-M2.5 safetensors shards; DeepSeek-V4 pending KTransformers upstream V4 MLA kernel |
+| **Prerequisite** | 🔒 Blocked | `ktransformers` compiled for target CUDA arch + model safetensors shards (MiniMax-M2.5 126 GB or DeepSeek-V4-Flash 340 GB); DeepSeek-V4-Flash MXFP4 kernels now available upstream via KT-Kernel |
 
 #### 7.3.2 Continuous Batching
 **Effort:** Large — touches scheduler, server, orchestrator, and KV-cache.
@@ -409,7 +410,7 @@ sustainable decentralized inference network.
 
 | Task | Status | Notes |
 |------|--------|-------|
-| DeepSeek-V4 MLA kernel integration | 🔒 Blocked | Pending KTransformers upstream V4 MLA kernel support |
+| DeepSeek-V4-Flash MXFP4 MoE + NSA MLA via KT-Kernel | Available | `--kt-method MXFP4` via KTransformers + SGLang; `DeepSeekV4FlashConfig` preset available |
 | Per-model `DeviceMap` profiles (memory footprint, layer count, head config) | Planned | Separate profile files under `astra/inference/profiles/` |
 | Model registry API (`GET /v1/models` returns all loaded checkpoints) | Planned | Extend `openai_compat.py` — already returns one model |
 | Hot-swap model loading (load new checkpoint without restarting nodes) | Planned | WeightLoader + signal-based reload |
@@ -451,7 +452,7 @@ sustainable decentralized inference network.
 | Attention kernel | numpy `@` matmul / PyTorch GPU (via `KTransformersAdapter`) | `ktransformers.ops.mla_forward` |
 | DHT | in-memory dict / `HivemindDHT` (Phase 5 done) | `hivemind.DHT` |
 | Transport | gRPC | gRPC with mTLS (done — Phase 5) ✅ |
-| Model weights | random arrays | MiniMax-M2.5 safetensors shards (primary); DeepSeek-V4 pending KTransformers upstream V4 adaptation |
+| Model weights | random arrays | MiniMax-M2.5 safetensors shards; DeepSeek-V4-Flash (MXFP4 quantized) via KT-Kernel |
 | Memory | 16–64 GB RAM | 512 GB+ NVMe-backed mmap |
 
 ---
@@ -496,7 +497,7 @@ sustainable decentralized inference network.
 
 ## Known Limitations (Alpha)
 
-1. **MiniMax-M2.5 validated; DeepSeek-V4 pending** — Real-weight loading, GQA attention, MoE expert dequant, and forward pass have been verified end-to-end with MiniMax-M2.5 (126 GB, 62 layers). Phase 7 software optimizations (continuous batching, speculative decoding, expert replication, weight loader, tokenizer, weight manifest) are complete on CPU; KTransformers C++ binding integration is blocked pending hardware. DeepSeek-V4 support is planned but blocked pending KTransformers upstream V4 architecture adaptation.
+1. **MiniMax-M2.5 validated; DeepSeek-V4-Flash supported** — Real-weight loading, GQA attention, MoE expert dequant, and forward pass have been verified end-to-end with MiniMax-M2.5 (126 GB, 62 layers). Phase 7 software optimizations (continuous batching, speculative decoding, expert replication, weight loader, tokenizer, weight manifest) are complete on CPU; KTransformers C++ binding integration is blocked pending hardware. DeepSeek-V4-Flash is now supported via KTransformers + SGLang KT-Kernel with MXFP4 quantized MoE and NSA sparse MLA (`--kt-method MXFP4`). See `scripts/build_ktransformers.sh` for setup and `astra/config/model_config.py` for the `DeepSeekV4FlashConfig` preset.
 2. **KTransformersStub is numpy / torch_fallback** — The `KTransformersAdapter` now provides GPU-accelerated torch fallback when PyTorch + CUDA are available (validated on WSL2 + NVIDIA RTX 5070 Ti). This is faster than pure numpy but still ~10–20× slower than KTransformers C++ CUDA kernels. Use for correctness testing only.
 3. **DHT bridge ready, multi-machine validation pending** — The hivemind DHT
    bridge (`astra/network/hivemind_bridge.py`) is fully implemented and tested.

@@ -1,16 +1,16 @@
 # Astra — 测试方案
 
-> 版本 0.3 · 2026 年 4 月 · Apache License 2.0
+> 版本 0.4 · 2026 年 5 月 · Apache License 2.0
 
 ---
 
 ## 1. 当前测试状态（诚实评估）
 
-### 1.1 已通过的自动化测试（510 个通过，0 失败，1 跳过，可在 CI 中运行）
+### 1.1 已通过的自动化测试（574 收集，0 失败，1 跳过，可在 CI 中运行）
 
 ```
 python -m pytest tests/ -v
-# 511 collected, 0 failed, 1 skipped in ~29s（纯 CPU / NumPy 环境）
+# 574 collected, 0 failed, 1 skipped in ~35s（纯 CPU / NumPy 环境）
 ```
 
 | 测试文件 | 覆盖范围 | 测试数 |
@@ -39,11 +39,13 @@ python -m pytest tests/ -v
 | `test_speculative.py` | SpeculativeDecoder 草稿生成、验收拒绝采样、KV 回滚、猜测长度配置、端到端推测解码 | 20 |
 | `test_continuous_batching.py` | BatchScheduler 请求入队/出队、FIFO 公平性、最大序列长度限制、batch 指标重置 | 33 |
 | `test_expert_replication.py` | ExpertReplicaManager 副本管理、负载感知路由、节点负载分数、健康检查、副本调度 | 33 |
+| `test_model_config.py` | Multi-model config presets (DeepSeek-V4-Flash, MiniMax-M2.5), weight resolution, dtype mapping, layer counts, KV head config | 37 |
+| `test_batch_utils.py` | Sequence pad/unpad, attention mask generation, causal mask creation, mixed-length batch support | 26 |
 
 ### 1.2 已填补的覆盖空缺（Phase 3–7 完成）
 
-所有在 Phase 1/2 标记为"待补充"的测试文件现已编写并纳入 CI 流水线。`test_heterogeneous.py`、`test_kv_transfer.py`、`test_api.py`、`test_differential_privacy.py`、`test_tee.py`、`test_tls.py`、`test_hivemind_bridge.py`、`test_phase6.py`、`test_identity.py`、`test_rtt.py`、`test_engram.py`、`test_weight_loader.py`、`test_weight_manifest.py`、`test_tokenizer.py`、`test_speculative.py`、`test_continuous_batching.py`、`test_expert_replication.py` 直接测试各自模块，共计 510 个测试（510 通过，0 失败，1 跳过）。
-（Phase 1/2: 168 + Phase 3: 84 + Phase 4: 33 + Phase 5: 30 + Phase 6: 45 + Phase 7: 150）
+所有在 Phase 1/2 标记为"待补充"的测试文件现已编写并纳入 CI 流水线。`test_heterogeneous.py`、`test_kv_transfer.py`、`test_api.py`、`test_differential_privacy.py`、`test_tee.py`、`test_tls.py`、`test_hivemind_bridge.py`、`test_phase6.py`、`test_identity.py`、`test_rtt.py`、`test_engram.py`、`test_weight_loader.py`、`test_weight_manifest.py`、`test_tokenizer.py`、`test_speculative.py`、`test_continuous_batching.py`、`test_expert_replication.py`、`test_model_config.py`、`test_batch_utils.py` 直接测试各自模块，共计 574 收集（573 通过，0 失败，1 跳过）。
+（574 collected：Phase 1: 60 + Phase 2: 16 + Phase 3: 177 + Phase 4: 89 + Phase 5: 36 + Phase 6: 47 + Phase 7: 149）
 
 #### 剩余覆盖空缺（待补充）
 
@@ -64,6 +66,7 @@ python -m pytest tests/ -v
 | 测试项 | 所需条件 | 验证方式 |
 |-------|---------|---------|
 | KTransformers C++ 内核正确性 | CUDA GPU + 编译好的 ktransformers | 与 NumPy 存根输出做数值对比 |
+| 多模型配置 (MiniMax-M2.5, DeepSeek-V4-Flash) 全量测试 | safetensors 权重分片 | scripts/verify_minimax_m2.py、scripts/check_v4pro_specs.py |
 | 真实 MLA 注意力数值精度 | torch + CUDA | 与 HuggingFace 参考实现对比（atol=1e-3） |
 | GPU/CPU 显存占用 | 16 GB VRAM + 64 GB RAM | `nvidia-smi` + `/proc/meminfo` 监控 |
 | MiniMax-M2.5 真权推理 | 权重文件 + 126 GB 磁盘 | `scripts/smoke_kt_adapter.py` 端到端验证 |
@@ -245,13 +248,14 @@ jobs:
 │  Layer 3: 端到端集成（本地双进程 gRPC）          │  ← PR 合并前
 │  mock_pipeline.py Phase 1 & 2 作为 pytest 用例  │
 ├─────────────────────────────────────────────────┤
-│  Layer 2: 组件集成（现有 510 个测试）            │  ← 每次 push
+│  Layer 2: 组件集成（现有 574 个测试）            │  ← 每次 push
 │  序列化 · gRPC · DHT · Orchestrator ·           │
 │  HeterogeneousEngine · KVTransfer · API · DP ·  │
 │  TEE · TLS · HivemindBridge · Phase6 ·          │
 │  Identity · RTT · Engram · WeightLoader ·       │
 │  Speculative · ContinuousBatching ·             │
-│  ExpertReplication · Tokenizer · CheckEnv       │
+│  ExpertReplication · Tokenizer · CheckEnv ·     │
+│  ModelConfig · BatchUtils                       │
 ├─────────────────────────────────────────────────┤
 │  Layer 1: 纯单元测试（✅ 已完成）                │  ← 每次 push
 │  HeterogeneousEngine · KVTransfer · API · DP ·  │
@@ -289,7 +293,7 @@ python -m pytest tests/test_hivemind_bridge.py -v
 python -m pytest tests/test_phase6.py -v
 
 # 运行 Phase 7 测试（推理引擎）
-python -m pytest tests/test_speculative.py tests/test_continuous_batching.py tests/test_expert_replication.py -v
+python -m pytest tests/test_speculative.py tests/test_continuous_batching.py tests/test_expert_replication.py tests/test_model_config.py tests/test_batch_utils.py -v
 
 # 运行 mock pipeline 模拟（Phase 1 & 2 端到端脚本，非 pytest）
 python mock_pipeline.py --phase 1 --seq-len 16 --hidden-dim 256

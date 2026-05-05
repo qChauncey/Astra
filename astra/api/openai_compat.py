@@ -79,12 +79,13 @@ def _detect_cpu_brand() -> str:
     """Return the CPU brand string or 'unknown'."""
     import platform
     try:
-        import subprocess, sys
+        import subprocess  # noqa: E402
+        import sys  # noqa: E402
         if sys.platform == "win32":
             out = subprocess.check_output(
                 ["wmic", "cpu", "get", "name"], text=True, timeout=5
             )
-            lines = [l.strip() for l in out.splitlines() if l.strip()]
+            lines = [line.strip() for line in out.splitlines() if line.strip()]
             return lines[-1] if len(lines) > 1 else platform.processor() or "unknown"
         elif sys.platform == "darwin":
             out = subprocess.check_output(
@@ -97,23 +98,24 @@ def _detect_cpu_brand() -> str:
                     for line in f:
                         if line.startswith("model name"):
                             return line.split(":", 1)[1].strip()
-            except Exception:
+            except (FileNotFoundError, PermissionError, OSError):
                 pass
             return platform.processor() or "unknown"
-    except Exception:
+    except (subprocess.SubprocessError, OSError):
         return platform.processor() or "unknown"
 
 
 def _detect_gpu_brand() -> str:
     """Return the GPU brand string or 'none / not detected'."""
+    import sys  # noqa: E402
     try:
-        import subprocess, sys
+        import subprocess  # noqa: E402
         if sys.platform == "win32":
             out = subprocess.check_output(
                 ["wmic", "path", "win32_VideoController", "get", "name"],
                 text=True, timeout=5,
             )
-            lines = [l.strip() for l in out.splitlines() if l.strip()]
+            lines = [line.strip() for line in out.splitlines() if line.strip()]
             return lines[-1] if len(lines) > 1 else "none / not detected"
         else:
             try:
@@ -134,7 +136,7 @@ def _detect_ram_total() -> str:
     """Return total RAM in human-readable format."""
     import platform
     try:
-        import psutil
+        import psutil  # type: ignore[import-untyped]
         total = psutil.virtual_memory().total
         if total >= 1 << 30:
             return f"{total / (1 << 30):.1f} GB"
@@ -142,7 +144,9 @@ def _detect_ram_total() -> str:
     except ImportError:
         pass
     try:
-        import subprocess, sys, re
+        import re
+        import subprocess  # noqa: E402
+        import sys  # noqa: E402
         if sys.platform == "win32":
             out = subprocess.check_output(
                 ["wmic", "computersystem", "get", "totalphysicalmemory"],
@@ -165,7 +169,7 @@ def _detect_ram_total() -> str:
                         kb = int(re.search(r"(\d+)", line).group(1))
                         gb = kb / (1024 * 1024)
                         return f"{gb:.1f} GB"
-    except Exception:
+    except (FileNotFoundError, PermissionError, OSError, subprocess.SubprocessError):
         pass
     return f"{platform.system()} default"
 
@@ -301,7 +305,6 @@ def create_app(
 
             pc = app.state.pipeline_config
             num_layers = getattr(pc, "num_layers", 61)
-            hidden_dim = getattr(pc, "hidden_dim", 4096)
 
             dmap = DeviceMap.cpu_only()
 
@@ -536,7 +539,7 @@ def create_app(
     @app.get("/api/device-info")
     async def device_info(_raw: Request):
         """Return current device / hardware information."""
-        import platform
+        import platform  # noqa: E402
         info: Dict[str, str] = {
             "hostname": platform.node(),
             "os": f"{platform.system()} {platform.release()}",
@@ -564,7 +567,7 @@ def create_app(
     @app.post("/api/mode")
     async def set_mode(raw: Request):
         """Switch operating mode (offline or p2p)."""
-        import json as _json
+        import json as _json  # noqa: E402
         body = await raw.body()
         payload = _json.loads(body)
         new_mode = payload.get("mode", "").strip()
@@ -581,10 +584,10 @@ def create_app(
         # ── Switch to offline: start local InferenceServer + register in DHT ──
         if new_mode == "offline":
             try:
-                import socket
-                from ..inference.heterogeneous import DeviceMap
-                from ..rpc.server import InferenceServer
-                from ..network.dht import DHTNodeRecord
+                import socket  # noqa: E402
+                from ..inference.heterogeneous import DeviceMap  # noqa: E402
+                from ..rpc.server import InferenceServer  # noqa: E402
+                from ..network.dht import DHTNodeRecord  # noqa: E402
 
                 # Find an available port
                 with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
@@ -711,7 +714,7 @@ def create_app(
     @app.post("/api/login")
     async def login(raw: Request):
         """Decentralized challenge-response login. Returns a session token."""
-        import json as _json
+        import json as _json  # noqa: E402
         body = await raw.body()
         payload = _json.loads(body)
         contributor_id = payload.get("contributor_id", "").strip()
@@ -758,7 +761,7 @@ def create_app(
     @app.post("/api/login/challenge")
     async def login_challenge(raw: Request):
         """Return a challenge nonce for the given contributor_id."""
-        import json as _json
+        import json as _json  # noqa: E402
         body = await raw.body()
         payload = _json.loads(body)
         contributor_id = payload.get("contributor_id", "").strip()
@@ -795,7 +798,7 @@ def create_app(
     @app.post("/api/earnings/credit")
     async def earnings_credit(raw: Request):
         """Credit a contributor for completed work (token‑based incentive)."""
-        import json as _json
+        import json as _json  # noqa: E402
         body = await raw.body()
         payload = _json.loads(body)
         contributor_id = payload.get("contributor_id", "").strip()

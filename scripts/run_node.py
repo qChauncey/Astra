@@ -67,6 +67,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from astra.inference.heterogeneous import DeviceMap
 from astra.network.dht import AstraDHT, DHTNodeRecord
 from astra.rpc.server import InferenceServer
+from astra.config.model_config import get_model_config
 
 log = logging.getLogger("astra.run_node")
 
@@ -120,9 +121,65 @@ def main() -> None:
         help="Geographic region tag",
     )
     parser.add_argument(
+        "--model",
+        default=None,
+        help="Model ID (e.g. deepseek-ai/DeepSeek-V4-Flash). Uses model config defaults if set.",
+    )
+    parser.add_argument(
         "--experts",
         default="all",
         help='Expert shards: "all", "0-127", or "0,1,2"',
+    )
+    # ── KT-Kernel / SGLang-style parameters (DeepSeek-V4-Flash MXFP4) ──
+    parser.add_argument(
+        "--kt-method",
+        default=None,
+        help="KT kernel method: MXFP4 (V4-Flash), FP8, or empty for legacy",
+    )
+    parser.add_argument(
+        "--kt-weight-path",
+        default=None,
+        help="Path to model weight files for KT-Kernel CPU inference",
+    )
+    parser.add_argument(
+        "--kt-num-gpu-experts",
+        type=int,
+        default=None,
+        help="Number of routed experts kept on GPU (default from model config)",
+    )
+    parser.add_argument(
+        "--kt-cpuinfer",
+        type=int,
+        default=None,
+        help="CPU inference workers for offline experts (default from model config)",
+    )
+    parser.add_argument(
+        "--kt-threadpool-count",
+        type=int,
+        default=None,
+        help="Threadpool count for CPU inference (default from model config)",
+    )
+    parser.add_argument(
+        "--kt-gpu-prefill-token-threshold",
+        type=int,
+        default=4096,
+        help="Token threshold below which prefill runs on GPU only",
+    )
+    parser.add_argument(
+        "--kt-enable-dynamic-expert-update",
+        action="store_true",
+        help="Enable dynamic expert offload update during inference",
+    )
+    parser.add_argument(
+        "--attention-backend",
+        default="flashinfer",
+        choices=["flashinfer", "triton", "torch"],
+        help="Attention backend for NSA sparse MLA or flash attention",
+    )
+    parser.add_argument(
+        "--disable-shared-experts-fusion",
+        action="store_true",
+        help="Disable shared expert fusion (recommended for MXFP4)",
     )
     parser.add_argument(
         "--gpu",
@@ -156,7 +213,10 @@ def main() -> None:
     expert_shards = _parse_expert_range(args.experts)
     dmap = _build_device_map(args)
     if args.hidden_dim > 0:
-        dmap.hidden_dim = args.hidden_dim
+        dmap._hidden_dim_override = args.hidden_dim
+
+    # Resolve model config for defaults
+    mc = get_model_config(args.model) if args.model else None
 
     # Offline mode: this node owns all layers
     if args.mode == "offline":
@@ -170,19 +230,42 @@ def main() -> None:
     log.info("  Region:     %s", args.region)
     log.info("  Experts:    %d shards", len(expert_shards))
     log.info("  Backend:    %s", "GPU (KTransformers)" if args.gpu else "CPU (numpy stub)")
+    if args.gpu and mc:
+        kt_method = args.kt_method or mc.kt_method
+        kt_gpu = args.kt_num_gpu_experts or mc.kt_num_gpu_experts
+        kt_cpu = args.kt_cpuinfer or mc.kt_cpuinfer
+        kt_threads = args.kt_threadpool_count or mc.kt_threadpool_count
+        log.info("  KT-Method:  %s", kt_method)
+        log.info("  KT-GPU Exp: %d", kt_gpu)
+        log.info("  KT-CPU Inf: %d", kt_cpu)
+        log.info("  KT-Threads: %d", kt_threads)
+        log.info("  Attention:  %s", args.attention_backend)
     log.info("=" * 60)
 
     # ── Start gRPC server ─────────────────────────────────────────────
-    server = InferenceServer(
-        node_id=args.node_id,
-        layer_start=args.layer_start,
-        layer_end=args.layer_end,
-        port=args.port,
-        geo_region=args.region,
-        expert_shards=expert_shards,
-        device_map=dmap,
-        max_workers=args.workers,
-    )
+    server_kwargs: dict = {
+        "node_id": args.node_id,
+        "layer_start": args.layer_start,
+        "layer_end": args.layer_end,
+        "port": args.port,
+        "geo_region": args.region,
+        "expert_shards": expert_shards,
+        "device_map": dmap,
+        "max_workers": args.workers,
+    }
+    # Forward KT-Kernel parameters to the inference server
+    if args.gpu and mc:
+        server_kwargs["kt_method"] = args.kt_method or mc.kt_method
+        server_kwargs["kt_weight_path"] = args.kt_weight_path
+        server_kwargs["kt_num_gpu_experts"] = args.kt_num_gpu_experts or mc.kt_num_gpu_experts
+        server_kwargs["kt_cpuinfer"] = args.kt_cpuinfer or mc.kt_cpuinfer
+        server_kwargs["kt_threadpool_count"] = args.kt_threadpool_count or mc.kt_threadpool_count
+        server_kwargs["kt_gpu_prefill_token_threshold"] = args.kt_gpu_prefill_token_threshold
+        server_kwargs["kt_enable_dynamic_expert_update"] = args.kt_enable_dynamic_expert_update
+        server_kwargs["attention_backend"] = args.attention_backend
+        server_kwargs["disable_shared_experts_fusion"] = args.disable_shared_experts_fusion
+        server_kwargs["model_config"] = mc
+    server = InferenceServer(**server_kwargs)
     server.start()
 
     # ── Announce to DHT ───────────────────────────────────────────────

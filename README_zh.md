@@ -7,7 +7,7 @@
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org)
-[![Tests](https://img.shields.io/badge/tests-510%20passed-brightgreen)]()
+[![Tests](https://img.shields.io/badge/tests-574%20collected-brightgreen)]()
 [![CI](https://github.com/qchauncey/astra/actions/workflows/ci.yml/badge.svg)](.github/workflows/ci.yml)
 [![Status](https://img.shields.io/badge/status-Phase%201--7%20完成%20%7C%20Phase%208%20计划中-blue)]()
 
@@ -17,7 +17,7 @@
 - **[KTransformers](https://github.com/kvcache-ai/ktransformers)** 式的异构 GPU/CPU 计算拆分
 - **[hivemind](https://github.com/learning-at-home/hivemind)** DHT 用于节点发现和键值存储
 
-> **Alpha 阶段。** Phase 1–7 已完成并通过测试（510 通过，0 失败，1 跳过，CPU/NumPy CI）。当前验证目标：**MiniMax-M2.5**（126 GB，62 层，GQA，20 万词表）——真权加载、GQA 注意力、MoE 专家反量化及前向推理已端到端验证通过。`KTransformersAdapter`（`astra/inference/ktransformers_adapter.py`）在 PyTorch + CUDA 可用时提供 GPU 加速的 torch 回退方案，覆盖 MLA、RMSNorm、RoPE 和 matmul 操作（已在 WSL2 + NVIDIA RTX 5070 Ti 上验证）。KTransformers C++ 绑定（MLA 融合内核 + CUDA 算子）已编译并通过 `check_env.py` 检测；冒烟测试套件（`scripts/smoke_kt_adapter.py`）验证了所有适配器操作。轻量级真权验证路径（`scripts/verify_real_weights_small.py`）在单个分片/单层上验证 ModelIndex、MmapWeightStore、GQA 张量和 MoE FP8 反量化，无需加载完整模型。Phase 7（真权加载、连续批处理、投机解码、专家复制、词表管理、集群亲和性、编排器负载均衡）已完成。Phase 8（高级前端界面：聊天交互界面、模式切换、模型/设备信息、Token 产出速度计）计划中。**DeepSeek-V4** 支持已规划，但需等待 KTransformers 上游完成 V4 架构适配后方可推进。
+> **Alpha 阶段。** Phase 1–7 已完成并通过测试（573 通过，0 失败，1 跳过，574 收集项，CPU/NumPy CI）。当前验证目标：**MiniMax-M2.5**（126 GB，62 层，GQA，20 万词表）——真权加载、GQA 注意力、MoE 专家反量化及前向推理已端到端验证通过。`KTransformersAdapter`（`astra/inference/ktransformers_adapter.py`）在 PyTorch + CUDA 可用时提供 GPU 加速的 torch 回退方案，覆盖 MLA、RMSNorm、RoPE 和 matmul 操作（已在 WSL2 + NVIDIA RTX 5070 Ti 上验证）。KTransformers C++ 绑定（MLA 融合内核 + CUDA 算子）已编译并通过 `check_env.py` 检测；冒烟测试套件（`scripts/smoke_kt_adapter.py`）验证了所有适配器操作。`batch_utils.py` 提供序列填充/去填充和注意力掩码生成；`model_config.py` 提供多模型配置预设（DeepSeek-V4-Flash、MiniMax-M2.5 等）。Phase 7（真权加载、连续批处理、投机解码、专家复制、词表管理、集群亲和性、编排器负载均衡）已完成。Phase 8（高级前端界面：聊天交互界面、模式切换、模型/设备信息、Token 产出速度计）计划中。**DeepSeek-V4-Flash**（MXFP4 量化 MoE，NSA 稀疏 MLA）现已在 KTransformers + SGLang KT-Kernel 上获得支持——配置预设见 `astra/config/model_config.py` 中的 `DeepSeekV4FlashConfig`，一键构建环境见 `scripts/build_ktransformers.sh`。
 
 ---
 
@@ -31,7 +31,7 @@
 | **Phase 4** | 差分隐私（ε/δ 预算、逐层噪声）、TEE（Intel SGX + AMD SEV-SNP） | ✅ 已完成 |
 | **Phase 5** | gRPC TLS 双向认证 + hivemind 多机 DHT 集成 | ✅ 已完成 |
 | **Phase 6** | SPA 仪表盘（聊天、监控、身份、收益）、挑战-应答登录、实时监控、代币记账 | ✅ 已完成 |
-| **Phase 7** | 推理引擎（MiniMax-M2.5 验证、真权加载、连续批处理、投机解码、专家复制、词表管理、KTransformers 适配器） | ✅ 已完成 |
+| **Phase 7** | 推理引擎（MiniMax-M2.5 验证、真权加载、连续批处理、投机解码、专家复制、词表管理、KTransformers 适配器、批处理工具、模型配置） | ✅ 已完成 |
 | **Phase 8** | 高级前端界面（聊天交互界面、模式切换、模型/设备信息、Token 产出速度计） | 📋 计划中 |
 | **Phase 9** | 生产上线与生态（多模型支持、代币经济、运维加固） | 📋 计划中 |
 
@@ -68,6 +68,7 @@ graph TD
 | `astra.inference.HeterogeneousEngine` | GPU 注意力 + CPU MoE FFN 计算拆分 |
 | `astra.inference.SharedExpertCache` | LRU 缓存；专家 0 和 1 永久固定 |
 | `astra.inference.KTransformersAdapter` | GPU torch 回退 + KTransformers C++ 绑定：MLA、RMSNorm、RoPE、matmul |
+| `astra.inference.batch_utils` | 序列填充/去填充、注意力掩码、因果掩码生成 |
 
 ### 🔐 安全与隐私
 
@@ -130,7 +131,7 @@ python mock_pipeline.py --phase 1 --seq-len 16 --hidden-dim 256
 # Phase 2 — 双节点 gRPC 流水线
 python mock_pipeline.py --phase 2 --seq-len 16 --hidden-dim 256
 
-# 完整测试套件（511 收集项，仅需 CPU）
+# 完整测试套件（574 收集项，仅需 CPU）
 python -m pytest tests/ -v
 ```
 
@@ -209,7 +210,7 @@ python scripts/run_node.py --mode offline --gpu --api-port 8080
 
 | 工作流 | 覆盖 |
 |--------|------|
-| `.github/workflows/ci.yml` | Phase 1–6 回归测试（仅 CPU） |
+| `.github/workflows/ci.yml` | Phase 1–7 回归测试（仅 CPU） |
 | `.github/workflows/hardware_test.yml` | 4 个 job：环境检查、冒烟测试、基准测试、性能阈值；需要 GPU |
 
 ### 7.7 已知限制与后续步骤
@@ -234,18 +235,18 @@ python scripts/run_node.py --mode offline --gpu --api-port 8080
 ```
 astra/
 ├── serialization/        # TensorPacket 有线格式 v1
-├── inference/            # HeterogeneousEngine、SharedExpertCache、差分隐私、分词器、批处理调度器、投机解码、权重加载器、KTransformersAdapter
+├── inference/            # HeterogeneousEngine、SharedExpertCache、差分隐私、分词器、批处理调度器、投机解码、权重加载器、KTransformersAdapter、batch_utils
 ├── tee/                  # Intel SGX (Gramine) + AMD SEV-SNP 后端
 ├── routing/              # GeoAwareMoERouter（haversine RTT + gate + dispatch）、专家遥测、集群亲和性
 ├── rpc/                  # gRPC proto、服务端/客户端、TLS、KV-cache 传输
 ├── network/              # AstraDHT、HivemindBridge、编排器、RTT、身份、Engram
 ├── api/                  # 兼容 OpenAI 的 FastAPI + SPA 仪表盘（Phase 8：高级界面 + 遥测接口）
-└── config/               # 模型配置、默认值
+└── config/               # 模型配置、默认值、多模型预设（DeepSeek-V4-Flash、MiniMax-M2.5）
 
 mock_pipeline.py          # Phase 1 和 2 本地模拟框架
 scripts/                  # run_node.py、run_cluster.py、check_env.py、benchmark.py、load_test.py、smoke_kt_adapter.py、verify_real_weights_small.py
 installer/                # 一键安装器（install.bat/.ps1/.sh、start.bat）
-tests/                    # 510 个 pytest 测试通过 + 0 失败 + 1 跳过（CPU/NumPy CI）
+tests/                    # 574 收集项（CPU/NumPy CI）
 docs/                     # ARCHITECTURE、ROADMAP、TESTING、INSTALL、SECURITY 等
 ```
 
@@ -258,7 +259,7 @@ docs/                     # ARCHITECTURE、ROADMAP、TESTING、INSTALL、SECURIT
 | [docs/INSTALL.md](docs/INSTALL.md) | 各平台安装指南 |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 系统设计、数据流、有线格式规范 |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | 分阶段计划（Phase 1–7 ✓，Phase 8 计划中 — 高级前端界面） |
-| [docs/TESTING.md](docs/TESTING.md) | 测试策略：510 项测试 + 硬件测试清单 |
+| [docs/TESTING.md](docs/TESTING.md) | 测试策略：574 项测试 + 硬件测试清单 |
 | [docs/SECURITY.md](docs/SECURITY.md) | mTLS、差分隐私、TEE 远程证明 |
 | [docs/TEE.md](docs/TEE.md) | TEE 部署：Intel SGX（Gramine）和 AMD SEV-SNP |
 | [docs/TLS.md](docs/TLS.md) | mTLS 搭建和配置指南 |

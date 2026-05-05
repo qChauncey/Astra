@@ -92,8 +92,14 @@ def pad_sequences(
         for i, length in enumerate(lengths):
             pad_mask[i, :length] = False  # False = valid token
         # Causal + pad: True = attend (not masked)
+        # Mask both query (j) and key (k) padding positions
         causal = np.tri(batch_len, batch_len, k=0, dtype=bool)  # (max_len, max_len)
-        attn_mask = causal[np.newaxis, :, :] & ~pad_mask[:, np.newaxis, :]  # (batch, max, max)
+        not_pad = ~pad_mask  # (batch, max_len)
+        attn_mask = (
+            causal[np.newaxis, :, :]               # (1, max, max)
+            & not_pad[:, :, np.newaxis]             # (batch, max, 1) — query mask
+            & not_pad[:, np.newaxis, :]             # (batch, 1, max) — key mask
+        )  # (batch, max, max)
 
     return padded, BatchInfo(
         original_lengths=lengths,

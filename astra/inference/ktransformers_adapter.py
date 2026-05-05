@@ -55,7 +55,7 @@ If ktransformers or its kernels are unavailable, the adapter reports
 from __future__ import annotations
 
 import logging
-from typing import Any, Optional
+from typing import Any, Optional, Tuple
 
 import numpy as np
 
@@ -65,6 +65,33 @@ logger = logging.getLogger("astra.inference.ktransformers")
 # ------------------------------------------------------------------ #
 # Runtime detection                                                    #
 # ------------------------------------------------------------------ #
+
+def detect_flashinfer() -> Tuple[bool, str]:
+    """
+    Check for flashinfer >= 0.6.9 (required for V4-Flash MXFP4 MoE).
+
+    Returns (available, version_string_or_error).
+    """
+    try:
+        import flashinfer  # type: ignore
+        ver = getattr(flashinfer, "__version__", "unknown")
+        # Parse version: flashinfer >= 0.6.9 exposes mxfp8_quantize etc.
+        try:
+            parts = tuple(int(x) for x in ver.split(".")[:3])
+            ok = parts >= (0, 6, 9)
+        except Exception:
+            ok = False
+        if ok:
+            # Verify key MXFP4 kernels are importable
+            try:
+                from flashinfer import mxfp8_quantize  # type: ignore # noqa: F401
+                from flashinfer import trtllm_fp4_block_scale_routed_moe  # type: ignore # noqa: F401
+            except ImportError:
+                ok = False
+        return ok, ver
+    except ImportError:
+        return False, "NOT INSTALLED"
+
 
 def detect_ktransformers() -> dict[str, Any]:
     """
@@ -84,6 +111,13 @@ def detect_ktransformers() -> dict[str, Any]:
             The RMSNorm kernel callable.
         rope : callable or None
             The RoPE kernel callable.
+        has_mxfp4_moe : bool
+            ``True`` if MXFP4 MoE kernels (mxfp8_quantize, trtllm fp4 block
+            scale routed_moe) are available via flashinfer >= 0.6.9.
+        has_nsa_sparse_mla : bool
+            ``True`` if NSA sparse MLA kernels are detected.
+        flashinfer_version : str or None
+            Version string for flashinfer if installed.
         error : str or None
             Error message if detection failed.
     """
@@ -94,8 +128,31 @@ def detect_ktransformers() -> dict[str, Any]:
         "mla_forward": None,
         "rms_norm": None,
         "rope": None,
+        "has_mxfp4_moe": False,
+        "has_nsa_sparse_mla": False,
+        "flashinfer_version": None,
         "error": None,
     }
+
+    # ---- Tier 0: flashinfer MXFP4 / NSA kernel probes ----
+    flash_ok, flash_ver = detect_flashinfer()
+    if flash_ok:
+        result["has_mxfp4_moe"] = True
+        result["flashinfer_version"] = flash_ver
+        logger.info("KTransformersAdapter: flashinfer %s ready (MXFP4 MoE)", flash_ver)
+        # Probe for NSA sparse MLA in flashinfer
+        try:
+            import flashinfer  # type: ignore
+            if hasattr(flashinfer, "nsa_sparse_mla_forward"):
+                result["has_nsa_sparse_mla"] = True
+                logger.info("KTransformersAdapter: NSA sparse MLA kernel detected")
+        except ImportError:
+            pass
+    elif flash_ver != "NOT INSTALLED":
+        logger.warning(
+            "KTransformersAdapter: flashinfer %s is too old (need >= 0.6.9 for MXFP4)",
+            flash_ver,
+        )
 
     # ---- Tier 1: ktransformers.ops (high-level ops module) ----
     try:
@@ -114,6 +171,17 @@ def detect_ktransformers() -> dict[str, Any]:
             rope_fn = getattr(ops, "rope", None) or getattr(ops, "rope_embedding", None)
             if rope_fn is not None:
                 result["rope"] = rope_fn
+
+            # Probe for MXFP4 MoE kernels exposed via ktransformers.ops
+            if not result["has_mxfp4_moe"]:
+                if hasattr(ops, "mxfp4_routed_moe") or hasattr(ops, "mxfp8_quantize"):
+                    result["has_mxfp4_moe"] = True
+                    logger.info(
+                        "KTransformersAdapter: MXFP4 MoE kernels detected via ktransformers.ops"
+                    )
+            if not result["has_nsa_sparse_mla"]:
+                if hasattr(ops, "nsa_sparse_mla"):
+                    result["has_nsa_sparse_mla"] = True
 
         # Probe for low-level registered PyTorch custom ops
         try:
@@ -136,10 +204,12 @@ def detect_ktransformers() -> dict[str, Any]:
             result["backend"] = "ktransformers_cpp"
             logger.info(
                 "KTransformersAdapter: ktransformers_cpp backend ready "
-                "(mla=%s, rms=%s, rope=%s)",
+                "(mla=%s, rms=%s, rope=%s, mxfp4_moe=%s, nsa=%s)",
                 result["mla_forward"] is not None,
                 result["rms_norm"] is not None,
                 result["rope"] is not None,
+                result["has_mxfp4_moe"],
+                result["has_nsa_sparse_mla"],
             )
             return result
 
@@ -162,15 +232,22 @@ def detect_ktransformers() -> dict[str, Any]:
         if rope_fn is not None:
             result["rope"] = rope_fn
 
+        # Also probe kt_kernel for MXFP4 MoE kernels
+        if not result["has_mxfp4_moe"]:
+            if hasattr(kt_kernel, "mxfp4_routed_moe") or hasattr(kt_kernel, "mxfp8_quantize"):
+                result["has_mxfp4_moe"] = True
+                logger.info("KTransformersAdapter: MXFP4 MoE kernels detected via kt_kernel")
+
         if mla is not None or rms is not None:
             result["available"] = True
             result["backend"] = "kt_kernel"
             logger.info(
                 "KTransformersAdapter: kt_kernel backend ready "
-                "(mla=%s, rms=%s, rope=%s)",
+                "(mla=%s, rms=%s, rope=%s, mxfp4_moe=%s)",
                 result["mla_forward"] is not None,
                 result["rms_norm"] is not None,
                 result["rope"] is not None,
+                result["has_mxfp4_moe"],
             )
             return result
 
@@ -227,12 +304,13 @@ class KTransformersAdapter:
         or ``"unavailable"``.
     """
 
-    def __init__(self, probe: Optional[dict[str, Any]] = None) -> None:
+    def __init__(self, probe: Optional[dict[str, Any]] = None, kt_method: str = "") -> None:
         info = probe or detect_ktransformers()
         self._info = info
         self._mla_fn = info.get("mla_forward")
         self._rms_fn = info.get("rms_norm")
         self._rope_fn = info.get("rope")
+        self._kt_method = kt_method  # "MXFP4", "FP8", "" (legacy)
         self._torch: Any = None
 
         try:
@@ -269,6 +347,26 @@ class KTransformersAdapter:
     def has_rope(self) -> bool:
         """Whether a dedicated RoPE kernel was found."""
         return self._rope_fn is not None
+
+    @property
+    def has_mxfp4_moe(self) -> bool:
+        """Whether MXFP4 MoE kernels (flashinfer >= 0.6.9) are available."""
+        return bool(self._info.get("has_mxfp4_moe", False))
+
+    @property
+    def has_nsa_sparse_mla(self) -> bool:
+        """Whether NSA sparse MLA kernels are available."""
+        return bool(self._info.get("has_nsa_sparse_mla", False))
+
+    @property
+    def flashinfer_version(self) -> Optional[str]:
+        """flashinfer version string, or None if not installed."""
+        return self._info.get("flashinfer_version")
+
+    @property
+    def kt_method(self) -> str:
+        """Active KT kernel method (e.g. 'MXFP4', 'FP8', '')."""
+        return self._kt_method
 
     # ------------------------------------------------------------------ #
     # Public kernel API                                                   #
@@ -547,5 +645,9 @@ class KTransformersAdapter:
             f"backend={self.backend_name}, "
             f"mla={self.has_mla}, "
             f"rms_norm={self.has_rms_norm}, "
-            f"rope={self.has_rope})"
+            f"rope={self.has_rope}, "
+            f"mxfp4_moe={self.has_mxfp4_moe}, "
+            f"nsa_sparse_mla={self.has_nsa_sparse_mla}, "
+            f"flashinfer={self.flashinfer_version}, "
+            f"kt_method={self._kt_method!r})"
         )

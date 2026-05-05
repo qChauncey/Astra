@@ -22,6 +22,11 @@ cffi>=1.16.0                  # cryptography Rust backend dependency
 #     bash scripts/build_ktransformers.sh
 # See docs/INSTALL.md for full GPU setup instructions.
 
+# ── DeepSeek-V4-Flash dependencies ────────────────────────────────────────────
+# flashinfer-python>=0.6.9      # MXFP4 MoE kernels (mxfp8_quantize, trtllm_fp4_block_scale_routed_moe)
+# flashinfer-cubin>=0.6.9       # must match flashinfer-python version
+# transformers==4.57.1          # required — 5.x breaks DeepSeekV4Config dataclass
+
 # ── Optional: P2P DHT node discovery (Phase 3) ───────────────────────────────
 # hivemind>=1.1.0              # pip install hivemind
 

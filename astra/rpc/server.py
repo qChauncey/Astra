@@ -48,6 +48,7 @@ import grpc
 
 import numpy as np
 
+from ..config.model_config import ModelConfig
 from ..inference.batch_scheduler import BatchGroup, ContinuousBatchScheduler
 from ..inference.batch_utils import unpad_output
 from ..inference.heterogeneous import DeviceMap, HeterogeneousEngine
@@ -71,6 +72,10 @@ class _InferenceServicer(pb2_grpc.InferenceServiceServicer):
         layer_end: int,
         geo_region: str,
         expert_shards: List[int],
+        kt_method: str = "",
+        kt_num_gpu_experts: int = 144,
+        kt_cpuinfer: int = 8,
+        attention_backend: str = "flashinfer",
     ) -> None:
         self._node_id = node_id
         self._engine = engine
@@ -78,6 +83,10 @@ class _InferenceServicer(pb2_grpc.InferenceServiceServicer):
         self._layer_end = layer_end
         self._geo_region = geo_region
         self._expert_shards = expert_shards
+        self._kt_method = kt_method
+        self._kt_num_gpu_experts = kt_num_gpu_experts
+        self._kt_cpuinfer = kt_cpuinfer
+        self._attention_backend = attention_backend
         self._request_count = 0
         self._lock = threading.Lock()
 
@@ -210,14 +219,47 @@ class InferenceServer:
         device_map: Optional[DeviceMap] = None,
         max_workers: int = 4,
         tls_config: Optional[TLSConfig] = None,
+        # ── KT-Kernel / DeepSeek-V4-Flash parameters ──
+        kt_method: str = "",
+        kt_weight_path: Optional[str] = None,
+        kt_num_gpu_experts: int = 144,
+        kt_cpuinfer: int = 8,
+        kt_threadpool_count: int = 2,
+        kt_gpu_prefill_token_threshold: int = 4096,
+        kt_enable_dynamic_expert_update: bool = False,
+        attention_backend: str = "flashinfer",
+        disable_shared_experts_fusion: bool = False,
+        model_config: Optional[ModelConfig] = None,
     ) -> None:
         self.node_id = node_id
         self.port = port
         self._expert_shards = expert_shards or list(range(256))
         self._tls_config = tls_config
+        self._kt_method = kt_method
+        self._kt_weight_path = kt_weight_path
+        self._kt_num_gpu_experts = kt_num_gpu_experts
+        self._kt_cpuinfer = kt_cpuinfer
+        self._kt_threadpool_count = kt_threadpool_count
+        self._kt_gpu_prefill_token_threshold = kt_gpu_prefill_token_threshold
+        self._kt_enable_dynamic_expert_update = kt_enable_dynamic_expert_update
+        self._attention_backend = attention_backend
+        self._disable_shared_experts_fusion = disable_shared_experts_fusion
+        self._model_config = model_config
 
         dmap = device_map or DeviceMap.cpu_only()
-        self._engine = HeterogeneousEngine.from_device_map(dmap)
+        self._engine = HeterogeneousEngine.from_device_map(
+            dmap,
+            kt_method=kt_method,
+            kt_weight_path=kt_weight_path,
+            kt_num_gpu_experts=kt_num_gpu_experts,
+            kt_cpuinfer=kt_cpuinfer,
+            kt_threadpool_count=kt_threadpool_count,
+            kt_gpu_prefill_token_threshold=kt_gpu_prefill_token_threshold,
+            kt_enable_dynamic_expert_update=kt_enable_dynamic_expert_update,
+            attention_backend=attention_backend,
+            disable_shared_experts_fusion=disable_shared_experts_fusion,
+            model_config=model_config,
+        )
 
         # Pre-pin shared experts 0 and 1
         for sid in range(2):
@@ -230,6 +272,10 @@ class InferenceServer:
             layer_end=layer_end,
             geo_region=geo_region,
             expert_shards=self._expert_shards,
+            kt_method=kt_method,
+            kt_num_gpu_experts=kt_num_gpu_experts,
+            kt_cpuinfer=kt_cpuinfer,
+            attention_backend=attention_backend,
         )
 
         self._grpc_server = grpc.server(

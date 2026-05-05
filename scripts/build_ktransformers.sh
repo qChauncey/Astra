@@ -144,9 +144,18 @@ log_step "Cloning ktransformers ..."
 if [[ -d "$CLONE_DIR/.git" ]]; then
     log_info "Existing clone found at $CLONE_DIR — pulling latest ..."
     git -C "$CLONE_DIR" pull --ff-only 2>/dev/null || log_warn "Could not pull (may be on a detached HEAD or have local changes)"
+    log_info "Updating submodules ..."
+    git -C "$CLONE_DIR" submodule update --init --recursive --depth 1 2>/dev/null || \
+        log_warn "Could not update submodules (may be missing .gitmodules)"
 else
     log_info "Cloning https://github.com/kvcache-ai/ktransformers into $CLONE_DIR ..."
-    git clone --depth 1 https://github.com/kvcache-ai/ktransformers.git "$CLONE_DIR"
+    git clone --depth 1 --recurse-submodules --shallow-submodules \
+        https://github.com/kvcache-ai/ktransformers.git "$CLONE_DIR" 2>/dev/null || {
+        # Fallback: clone without submodules first, then init
+        log_warn "--recurse-submodules failed, cloning shallow then init submodules ..."
+        git clone --depth 1 https://github.com/kvcache-ai/ktransformers.git "$CLONE_DIR"
+        git -C "$CLONE_DIR" submodule update --init --recursive --depth 1
+    }
 fi
 
 KT_KERNEL_DIR="$CLONE_DIR/kt-kernel"
@@ -233,6 +242,34 @@ else
     echo "  4. Try building with debug output: CPUINFER_BUILD_TYPE=Debug $0"
     echo "  5. Check disk space for build artifacts"
     exit 1
+fi
+
+echo ""
+
+# ── DeepSeek-V4-Flash extra dependencies ───────────────────────
+log_step "Installing V4-Flash dependencies (flashinfer >= 0.6.9, transformers pin) ..."
+
+# flashinfer >= 0.6.9 required for MXFP4 MoE kernels (mxfp8_quantize, trtllm_fp4_block_scale_routed_moe)
+FLASHINFER_VER=$(python -c "import flashinfer; print(flashinfer.__version__)" 2>/dev/null || echo "0.0.0")
+FLASHINFER_MAJOR=$(echo "$FLASHINFER_VER" | cut -d. -f1)
+FLASHINFER_MINOR=$(echo "$FLASHINFER_VER" | cut -d. -f2)
+if [ "$FLASHINFER_MAJOR" -lt 1 ] && [ "$FLASHINFER_MINOR" -lt 7 ]; then
+    log_info "Upgrading flashinfer from $FLASHINFER_VER to >= 0.6.9 ..."
+    pip install --upgrade "flashinfer-python>=0.6.9" "flashinfer-cubin>=0.6.9" 2>&1 || \
+        log_warn "flashinfer upgrade failed — V4-Flash MXFP4 MoE may not work"
+else
+    log_info "flashinfer $FLASHINFER_VER — OK (>= 0.6.9 required for MXFP4)"
+fi
+
+# transformers must be pinned to 4.57.1 (5.x breaks DeepSeekV4Config dataclass)
+TRANSFORMERS_VER=$(python -c "import transformers; print(transformers.__version__)" 2>/dev/null || echo "0.0.0")
+TRANSFORMERS_MAJOR=$(echo "$TRANSFORMERS_VER" | cut -d. -f1)
+if [ "$TRANSFORMERS_MAJOR" -ge 5 ]; then
+    log_warn "transformers $TRANSFORMERS_VER is 5.x — downgrading to 4.57.1 for V4-Flash compat"
+    pip install "transformers==4.57.1" 2>&1 || \
+        log_warn "transformers downgrade failed — V4-Flash may not start"
+else
+    log_info "transformers $TRANSFORMERS_VER — OK (4.x required for V4-Flash)"
 fi
 
 echo ""

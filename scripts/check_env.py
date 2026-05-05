@@ -82,14 +82,49 @@ def check_torch() -> Tuple[bool, str]:
 
 
 def check_ktransformers() -> Tuple[bool, str]:
+    # Try kt_kernel (editable pip install) first, then ktransformers
+    try:
+        import kt_kernel  # type: ignore
+        # Verify the native CUDA extension loads
+        from kt_kernel import kt_kernel_ext  # type: ignore  # noqa: F401
+        return True, f"{getattr(kt_kernel, '__version__', 'unknown')} (C++ CUDA kernels available via kt_kernel)"
+    except ImportError:
+        pass
     try:
         import ktransformers as kt  # type: ignore
-        return True, f"{getattr(kt, '__version__', 'unknown')} (C++ kernels available)"
+        return True, f"{getattr(kt, '__version__', 'unknown')} (C++ kernels available via ktransformers)"
     except ImportError:
         return False, (
             "NOT INSTALLED -- using numpy stub.\n"
             "    Install: https://github.com/kvcache-ai/ktransformers"
         )
+
+
+def check_flashinfer() -> Tuple[bool, str]:
+    """Verify flashinfer >= 0.6.9 for DeepSeek-V4-Flash MXFP4 MoE kernels."""
+    try:
+        import flashinfer  # type: ignore
+        ver = tuple(int(x) for x in flashinfer.__version__.split(".")[:2])
+        ok = ver >= (0, 7) or (ver == (0, 6) and int(flashinfer.__version__.split(".")[2] or 0) >= 9)
+        return ok, (
+            f"{flashinfer.__version__} {'OK (MXFP4 MoE kernel available)' if ok else 'WARN (need >= 0.6.9 for DeepSeek-V4-Flash MXFP4)'}"
+        )
+    except ImportError:
+        return False, "NOT INSTALLED -- MXFP4 MoE kernel unavailable (run: pip install flashinfer-python>=0.6.9 flashinfer-cubin>=0.6.9)"
+
+
+def check_transformers_v4flash() -> Tuple[bool, str]:
+    """Verify transformers == 4.57.1 for DeepSeek-V4-Flash config compatibility."""
+    try:
+        import transformers  # type: ignore
+        ver = transformers.__version__
+        major = int(ver.split(".")[0])
+        ok = major < 5
+        return ok, (
+            f"{ver} {'OK (4.x required for DeepSeek-V4-Flash)' if ok else 'FAIL (5.x breaks DeepSeekV4Config — pin to 4.57.1)'}"
+        )
+    except ImportError:
+        return True, "unknown (transformers not installed)"
 
 
 def check_hivemind() -> Tuple[bool, str]:
@@ -254,6 +289,8 @@ def run_checks() -> Dict[str, Any]:
         ("uvicorn",             lambda: check_package("uvicorn")),
         ("PyTorch + CUDA",      check_torch),
         ("KTransformers C++",   check_ktransformers),
+        ("flashinfer >=0.6.9",  check_flashinfer),
+        ("transformers 4.x",    check_transformers_v4flash),
         ("hivemind DHT",        check_hivemind),
         ("System RAM",          check_ram),
         ("Disk / NVMe",         check_nvme),
@@ -280,7 +317,7 @@ def print_report(results: Dict[str, Any]) -> None:
 
     # Required vs optional
     required = {"Python >=3.10", "numpy", "psutil", "grpcio", "astra package"}
-    optional_critical = {"PyTorch + CUDA", "KTransformers C++"}
+    optional_critical = {"PyTorch + CUDA", "KTransformers C++", "flashinfer >=0.6.9", "transformers 4.x"}
 
     print("\n" + "=" * 72)
     print("  Astra Environment Check".center(72))

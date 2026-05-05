@@ -5,7 +5,6 @@ Scans `/home/chauncey/minimax-m2.5` for safetensors files, computes
 a round-robin shard assignment across N nodes, and prints the deployment plan.
 No weights are copied or loaded — this is a metadata-only plan.
 """
-import hashlib
 import pathlib
 import sys
 import time
