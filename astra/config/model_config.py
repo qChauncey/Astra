@@ -39,6 +39,7 @@ class QuantizationType(enum.Enum):
     FP8 = "fp8"
     INT8 = "int8"
     INT4 = "int4"
+    MXFP4 = "mxfp4"             # Microlite FP4 (DeepSeek-V4-Flash routed experts)
 
 
 @dataclass(frozen=True)
@@ -90,9 +91,14 @@ class ModelConfig:
     num_mtp_modules: int = 0
     mtp_transformer_layers: int = 0
 
-    # ---- KTransformers ----
+    # ---- KTransformers / KT-Kernel integration ----
     ktransformers_supported: bool = True
     ktransformers_arch_name: str = ""
+    kt_method: str = ""                     # e.g. "MXFP4" for V4-Flash CPU/GPU split
+    attention_variant: str = "standard"     # e.g. "nsa_sparse_mla" for V4-Flash NSA
+    kt_num_gpu_experts: int = 144           # routed experts kept on GPU (MXFP4 path)
+    kt_cpuinfer: int = 8                    # CPU inference workers for offline experts
+    kt_threadpool_count: int = 2            # threadpool count for CPU inference
 
     # ---- Model file layout ----
     num_safetensors_shards: int = 0
@@ -158,9 +164,14 @@ DEEPSEEK_V4_FLASH = ModelConfig(
     use_mtp=True,
     num_mtp_modules=3,
     mtp_transformer_layers=1,
-    native_quant=QuantizationType.BF16,
+    native_quant=QuantizationType.MXFP4,
     ktransformers_supported=True,
     ktransformers_arch_name="deepseek_v3",
+    kt_method="MXFP4",
+    attention_variant="nsa_sparse_mla",
+    kt_num_gpu_experts=144,
+    kt_cpuinfer=8,
+    kt_threadpool_count=2,
     num_safetensors_shards=163,
     total_size_gb=671.0,
     auto_map={

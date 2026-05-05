@@ -54,6 +54,7 @@ import numpy as np
 
 from ..serialization.tensor_pack import TensorPacket
 from ..config.model_config import (
+    ModelConfig,
     get_model_config,
     AttentionType,
 )
@@ -619,6 +620,17 @@ class HeterogeneousEngine:
         device_map: DeviceMap,
         expert_cache: Optional[SharedExpertCache] = None,
         dp_injector: Optional[LayerDPInjector] = None,
+        # ── KT-Kernel / DeepSeek-V4-Flash parameters ──
+        kt_method: str = "",
+        kt_weight_path: Optional[str] = None,
+        kt_num_gpu_experts: int = 144,
+        kt_cpuinfer: int = 8,
+        kt_threadpool_count: int = 2,
+        kt_gpu_prefill_token_threshold: int = 4096,
+        kt_enable_dynamic_expert_update: bool = False,
+        attention_backend: str = "flashinfer",
+        disable_shared_experts_fusion: bool = False,
+        model_config: Optional[ModelConfig] = None,
     ) -> None:
         self._dmap = device_map
         self._expert_cache = expert_cache or SharedExpertCache(
@@ -631,6 +643,20 @@ class HeterogeneousEngine:
         self._backend = _kt_backend
         self._dp_injector = dp_injector  # Phase 4: DP noise injection
         self._last_compute_ms: float = 0.0
+
+        # ── KT-Kernel / DeepSeek-V4-Flash configuration ──
+        self._kt_method = kt_method
+        self._kt_weight_path = kt_weight_path
+        self._kt_num_gpu_experts = kt_num_gpu_experts
+        self._kt_cpuinfer = kt_cpuinfer
+        self._kt_threadpool_count = kt_threadpool_count
+        self._kt_gpu_prefill_token_threshold = kt_gpu_prefill_token_threshold
+        self._kt_enable_dynamic_expert_update = kt_enable_dynamic_expert_update
+        self._attention_backend = attention_backend
+        self._disable_shared_experts_fusion = disable_shared_experts_fusion
+        self._model_config = model_config or get_model_config(
+            "deepseek-v4-flash" if device_map.num_layers > 50 else "test-small"
+        )
 
         # Performance counters for GPU utilisation monitoring
         self._gpu_flops_total: float = 0.0
@@ -652,8 +678,34 @@ class HeterogeneousEngine:
         self._gqa_mode: bool = False
 
     @classmethod
-    def from_device_map(cls, dmap: DeviceMap) -> "HeterogeneousEngine":
-        return cls(device_map=dmap)
+    def from_device_map(
+        cls,
+        dmap: DeviceMap,
+        # ── KT-Kernel / DeepSeek-V4-Flash parameters ──
+        kt_method: str = "",
+        kt_weight_path: Optional[str] = None,
+        kt_num_gpu_experts: int = 144,
+        kt_cpuinfer: int = 8,
+        kt_threadpool_count: int = 2,
+        kt_gpu_prefill_token_threshold: int = 4096,
+        kt_enable_dynamic_expert_update: bool = False,
+        attention_backend: str = "flashinfer",
+        disable_shared_experts_fusion: bool = False,
+        model_config: Optional[ModelConfig] = None,
+    ) -> "HeterogeneousEngine":
+        return cls(
+            device_map=dmap,
+            kt_method=kt_method,
+            kt_weight_path=kt_weight_path,
+            kt_num_gpu_experts=kt_num_gpu_experts,
+            kt_cpuinfer=kt_cpuinfer,
+            kt_threadpool_count=kt_threadpool_count,
+            kt_gpu_prefill_token_threshold=kt_gpu_prefill_token_threshold,
+            kt_enable_dynamic_expert_update=kt_enable_dynamic_expert_update,
+            attention_backend=attention_backend,
+            disable_shared_experts_fusion=disable_shared_experts_fusion,
+            model_config=model_config,
+        )
 
     # ------------------------------------------------------------------ #
     # Weight loading                                                        #

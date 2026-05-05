@@ -118,7 +118,7 @@ class _ManagedNode:
         self._dht = AstraDHT(node_id=node_id)
 
         dmap = DeviceMap.cpu_only()
-        dmap.hidden_dim = hidden_dim
+        dmap._hidden_dim_override = hidden_dim
 
         self._server = InferenceServer(
             node_id=node_id,

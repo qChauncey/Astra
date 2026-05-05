@@ -17,7 +17,7 @@
 - **[KTransformers](https://github.com/kvcache-ai/ktransformers)** 式的异构 GPU/CPU 计算拆分
 - **[hivemind](https://github.com/learning-at-home/hivemind)** DHT 用于节点发现和键值存储
 
-> **Alpha 阶段。** Phase 1–7 已完成并通过测试（510 通过，0 失败，1 跳过，CPU/NumPy CI）。当前验证目标：**MiniMax-M2.5**（126 GB，62 层，GQA，20 万词表）——真权加载、GQA 注意力、MoE 专家反量化及前向推理已端到端验证通过。`KTransformersAdapter`（`astra/inference/ktransformers_adapter.py`）在 PyTorch + CUDA 可用时提供 GPU 加速的 torch 回退方案，覆盖 MLA、RMSNorm、RoPE 和 matmul 操作（已在 WSL2 + NVIDIA RTX 5070 Ti 上验证）。KTransformers C++ 绑定（MLA 融合内核 + CUDA 算子）已编译并通过 `check_env.py` 检测；冒烟测试套件（`scripts/smoke_kt_adapter.py`）验证了所有适配器操作。轻量级真权验证路径（`scripts/verify_real_weights_small.py`）在单个分片/单层上验证 ModelIndex、MmapWeightStore、GQA 张量和 MoE FP8 反量化，无需加载完整模型。Phase 7（真权加载、连续批处理、投机解码、专家复制、词表管理、集群亲和性、编排器负载均衡）已完成。Phase 8（高级前端界面：聊天交互界面、模式切换、模型/设备信息、Token 产出速度计）计划中。**DeepSeek-V4** 支持已规划，但需等待 KTransformers 上游完成 V4 架构适配后方可推进。
+> **Alpha 阶段。** Phase 1–7 已完成并通过测试（510 通过，0 失败，1 跳过，CPU/NumPy CI）。当前验证目标：**MiniMax-M2.5**（126 GB，62 层，GQA，20 万词表）——真权加载、GQA 注意力、MoE 专家反量化及前向推理已端到端验证通过。`KTransformersAdapter`（`astra/inference/ktransformers_adapter.py`）在 PyTorch + CUDA 可用时提供 GPU 加速的 torch 回退方案，覆盖 MLA、RMSNorm、RoPE 和 matmul 操作（已在 WSL2 + NVIDIA RTX 5070 Ti 上验证）。KTransformers C++ 绑定（MLA 融合内核 + CUDA 算子）已编译并通过 `check_env.py` 检测；冒烟测试套件（`scripts/smoke_kt_adapter.py`）验证了所有适配器操作。轻量级真权验证路径（`scripts/verify_real_weights_small.py`）在单个分片/单层上验证 ModelIndex、MmapWeightStore、GQA 张量和 MoE FP8 反量化，无需加载完整模型。Phase 7（真权加载、连续批处理、投机解码、专家复制、词表管理、集群亲和性、编排器负载均衡）已完成。Phase 8（高级前端界面：聊天交互界面、模式切换、模型/设备信息、Token 产出速度计）计划中。**DeepSeek-V4-Flash**（MXFP4 量化 MoE，NSA 稀疏 MLA）现已在 KTransformers + SGLang KT-Kernel 上获得支持——配置预设见 `astra/config/model_config.py` 中的 `DeepSeekV4FlashConfig`，一键构建环境见 `scripts/build_ktransformers.sh`。
 
 ---
 
