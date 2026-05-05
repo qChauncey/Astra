@@ -86,7 +86,7 @@ def check_ktransformers() -> Tuple[bool, str]:
     try:
         import kt_kernel  # type: ignore
         # Verify the native CUDA extension loads
-        from kt_kernel import kt_kernel_ext  # type: ignore
+        from kt_kernel import kt_kernel_ext  # type: ignore  # noqa: F401
         return True, f"{getattr(kt_kernel, '__version__', 'unknown')} (C++ CUDA kernels available via kt_kernel)"
     except ImportError:
         pass
