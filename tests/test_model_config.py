@@ -338,15 +338,16 @@ class TestBuiltinProfiles:
         from astra.config.model_config import DEEPSEEK_V4_FLASH
         cfg = DEEPSEEK_V4_FLASH
         assert cfg.model_id == "deepseek-ai/DeepSeek-V4-Flash"
-        assert cfg.attention_type == AttentionType.MLA
+        # V4-Flash uses Hybrid CSA (Compressed Sparse Attention) + HCA (Hash Compressed Attention)
+        assert cfg.attention_type == AttentionType.HYBRID_CSA_HCA
         assert cfg.native_quant == QuantizationType.MXFP4
         assert cfg.num_local_experts == 256
-        assert cfg.num_experts_per_tok == 8
-        assert cfg.num_shared_experts == 2
-        assert cfg.hidden_dim == 7168
-        assert cfg.num_layers == 61
-        assert cfg.total_experts == 258
-        assert cfg.gqa_groups == 1
+        assert cfg.num_experts_per_tok == 6
+        assert cfg.num_shared_experts == 1
+        assert cfg.hidden_dim == 4096
+        assert cfg.num_layers == 43
+        assert cfg.total_experts == 257
+        assert cfg.gqa_groups == 64  # 64 Q heads / 1 KV head = 64 groups (MLA-like)
 
     def test_minimax_m2_5(self):
         from astra.config.model_config import MINIMAX_M2_5
@@ -366,9 +367,9 @@ class TestBuiltinProfiles:
         from astra.config.model_config import DEEPSEEK_V4_FLASH
         cfg = DEEPSEEK_V4_FLASH
         assert cfg.ktransformers_supported is True
-        assert cfg.ktransformers_arch_name == "deepseek_v3"
+        assert cfg.ktransformers_arch_name == "deepseek_v4"
         assert cfg.kt_method == "MXFP4"
-        assert cfg.attention_variant == "nsa_sparse_mla"
+        assert cfg.attention_variant == "hybrid_csa_hca"
         assert cfg.kt_num_gpu_experts == 144
 
     def test_minimax_m2_5_ktransformers_fields(self):
@@ -422,8 +423,9 @@ class TestGetModelConfig:
         assert cfg.display_name == "DeepSeek-V4-Flash"
 
     def test_short_alias(self):
+        # "deepseekv4" alias maps to Pro (strongest model in family)
         cfg = get_model_config("deepseekv4")
-        assert cfg.display_name == "DeepSeek-V4-Flash"
+        assert cfg.display_name == "DeepSeek-V4-Pro"
 
     def test_lowercase_alias(self):
         cfg = get_model_config("minimax-m2-5")
