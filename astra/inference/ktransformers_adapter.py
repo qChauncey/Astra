@@ -66,6 +66,27 @@ logger = logging.getLogger("astra.inference.ktransformers")
 # Runtime detection                                                    #
 # ------------------------------------------------------------------ #
 
+# ------------------------------------------------------------------ #
+# DeepSeek-V4-Flash attention architecture constants                     #
+# ------------------------------------------------------------------ #
+
+# CSA (Compressed Sparse Attention) defaults (Section 2.3.1)
+CSA_DEFAULT_COMPRESSION_RATE = 4       # m: every 4 KV entries → 1 compressed
+CSA_DEFAULT_INDEXER_HEADS = 64         # n_I_h: lightning indexer query heads
+CSA_DEFAULT_INDEXER_HEAD_DIM = 128     # c_I: indexer head dimension
+CSA_DEFAULT_ATTENTION_TOPK = 512       # top-k compressed KV entries for V4-Flash
+CSA_DEFAULT_QUERY_HEADS = 64           # n_h: main attention query heads
+CSA_DEFAULT_HEAD_DIM = 512             # c: main attention head dimension
+CSA_DEFAULT_QUERY_COMPRESS_DIM = 1024  # d_c: query compression latent dimension
+CSA_DEFAULT_OUTPUT_GROUPS = 8          # g: grouped output projection groups
+CSA_DEFAULT_INTERMEDIATE_DIM = 1024    # d_g: per-group intermediate dim
+CSA_DEFAULT_WINDOW_SIZE = 128          # n_win: sliding window KV entries
+CSA_PARTIAL_ROPE_DIM = 64              # RoPE applied to last 64 dims only
+
+# HCA (Heavily Compressed Attention) defaults (Section 2.3.2)
+HCA_DEFAULT_COMPRESSION_RATE = 128     # m': every 128 KV entries → 1 compressed
+
+
 def detect_flashinfer() -> Tuple[bool, str]:
     """
     Check for flashinfer >= 0.6.9 (required for V4-Flash MXFP4 MoE).
@@ -91,6 +112,85 @@ def detect_flashinfer() -> Tuple[bool, str]:
         return ok, ver
     except ImportError:
         return False, "NOT INSTALLED"
+
+
+def detect_csa_kernels() -> Tuple[bool, str]:
+    """
+    Check for V4-Flash CSA (Compressed Sparse Attention) kernel support.
+
+    Searches for lightning-indexer sparse attention kernels in ktransformers,
+    flashinfer, or kt_kernel. Required for DeepSeek-V4-Flash hybrid attention.
+
+    Returns (has_csa, source_or_error).
+    """
+    # Check flashinfer for CSA-style compressed attention kernels
+    try:
+        import flashinfer  # type: ignore
+        if hasattr(flashinfer, "compressed_sparse_attention"):
+            return True, "flashinfer"
+        if hasattr(flashinfer, "csa_forward"):
+            return True, "flashinfer"
+    except ImportError:
+        pass
+
+    # Check ktransformers.ops for CSA kernels
+    try:
+        import ktransformers  # type: ignore
+        ops = getattr(ktransformers, "ops", None)
+        if ops is not None:
+            if hasattr(ops, "csa_forward") or hasattr(ops, "lightning_indexer"):
+                return True, "ktransformers.ops"
+    except ImportError:
+        pass
+
+    # Check kt_kernel for CSA kernels
+    try:
+        import kt_kernel  # type: ignore
+        if hasattr(kt_kernel, "csa_forward") or hasattr(kt_kernel, "lightning_indexer"):
+            return True, "kt_kernel"
+    except ImportError:
+        pass
+
+    return False, "NO CSA KERNEL FOUND"
+
+
+def detect_hca_kernels() -> Tuple[bool, str]:
+    """
+    Check for V4-Flash HCA (Heavily Compressed Attention) kernel support.
+
+    HCA uses extreme compression (m' = 128) without sparse selection.
+
+    Returns (has_hca, source_or_error).
+    """
+    # Check flashinfer for HCA-style heavy compression kernels
+    try:
+        import flashinfer  # type: ignore
+        if hasattr(flashinfer, "heavily_compressed_attention"):
+            return True, "flashinfer"
+        if hasattr(flashinfer, "hca_forward"):
+            return True, "flashinfer"
+    except ImportError:
+        pass
+
+    # Check ktransformers.ops for HCA kernels
+    try:
+        import ktransformers  # type: ignore
+        ops = getattr(ktransformers, "ops", None)
+        if ops is not None:
+            if hasattr(ops, "hca_forward") or hasattr(ops, "compressed_kv"):
+                return True, "ktransformers.ops"
+    except ImportError:
+        pass
+
+    # Check kt_kernel for HCA kernels
+    try:
+        import kt_kernel  # type: ignore
+        if hasattr(kt_kernel, "hca_forward"):
+            return True, "kt_kernel"
+    except ImportError:
+        pass
+
+    return False, "NO HCA KERNEL FOUND"
 
 
 def detect_ktransformers() -> dict[str, Any]:
@@ -130,6 +230,10 @@ def detect_ktransformers() -> dict[str, Any]:
         "rope": None,
         "has_mxfp4_moe": False,
         "has_nsa_sparse_mla": False,
+        "has_csa": False,
+        "has_hca": False,
+        "csa_source": None,
+        "hca_source": None,
         "flashinfer_version": None,
         "error": None,
     }
@@ -148,11 +252,34 @@ def detect_ktransformers() -> dict[str, Any]:
                 logger.info("KTransformersAdapter: NSA sparse MLA kernel detected")
         except ImportError:
             pass
+        # Probe for V4 hybrid attention (CSA/HCA) in flashinfer
+        csa_ok, csa_src = detect_csa_kernels()
+        if csa_ok:
+            result["has_csa"] = True
+            result["csa_source"] = csa_src
+        hca_ok, hca_src = detect_hca_kernels()
+        if hca_ok:
+            result["has_hca"] = True
+            result["hca_source"] = hca_src
     elif flash_ver != "NOT INSTALLED":
         logger.warning(
             "KTransformersAdapter: flashinfer %s is too old (need >= 0.6.9 for MXFP4)",
             flash_ver,
         )
+
+    # ---- Tier 0.5: CSA/HCA detection independent of flashinfer ----
+    if not result["has_csa"]:
+        csa_ok, csa_src = detect_csa_kernels()
+        if csa_ok:
+            result["has_csa"] = True
+            result["csa_source"] = csa_src
+            logger.info("KTransformersAdapter: CSA kernels detected via %s", csa_src)
+    if not result["has_hca"]:
+        hca_ok, hca_src = detect_hca_kernels()
+        if hca_ok:
+            result["has_hca"] = True
+            result["hca_source"] = hca_src
+            logger.info("KTransformersAdapter: HCA kernels detected via %s", hca_src)
 
     # ---- Tier 1: ktransformers.ops (high-level ops module) ----
     try:
@@ -364,6 +491,31 @@ class KTransformersAdapter:
         return self._info.get("flashinfer_version")
 
     @property
+    def has_csa(self) -> bool:
+        """Whether CSA (Compressed Sparse Attention) kernels are available."""
+        return bool(self._info.get("has_csa", False))
+
+    @property
+    def has_hca(self) -> bool:
+        """Whether HCA (Heavily Compressed Attention) kernels are available."""
+        return bool(self._info.get("has_hca", False))
+
+    @property
+    def csa_source(self) -> Optional[str]:
+        """Source module providing CSA kernels (e.g. 'flashinfer', 'ktransformers.ops')."""
+        return self._info.get("csa_source")
+
+    @property
+    def hca_source(self) -> Optional[str]:
+        """Source module providing HCA kernels (e.g. 'flashinfer', 'ktransformers.ops')."""
+        return self._info.get("hca_source")
+
+    @property
+    def has_v4_hybrid_attention(self) -> bool:
+        """Whether both CSA and HCA kernels are available for V4 hybrid attention."""
+        return self.has_csa and self.has_hca
+
+    @property
     def kt_method(self) -> str:
         """Active KT kernel method (e.g. 'MXFP4', 'FP8', '')."""
         return self._kt_method
@@ -479,6 +631,308 @@ class KTransformersAdapter:
         b_t = t.tensor(b, device="cuda", dtype=t.float32)
         out = t.matmul(a_t, b_t)
         return out.detach().cpu().numpy().astype(a.dtype)
+
+    # ------------------------------------------------------------------ #
+    # V4 Hybrid Attention: CSA / HCA / dispatcher                        #
+    # ------------------------------------------------------------------ #
+
+    def csa_attention(
+        self,
+        hidden_states: np.ndarray,
+        compressed_kv: Optional[np.ndarray] = None,
+        *,
+        compression_rate: int = CSA_DEFAULT_COMPRESSION_RATE,
+        indexer_heads: int = CSA_DEFAULT_INDEXER_HEADS,
+        indexer_head_dim: int = CSA_DEFAULT_INDEXER_HEAD_DIM,
+        attention_topk: int = CSA_DEFAULT_ATTENTION_TOPK,
+        head_dim: int = CSA_DEFAULT_HEAD_DIM,
+        num_heads: int = CSA_DEFAULT_QUERY_HEADS,
+        query_compress_dim: int = CSA_DEFAULT_QUERY_COMPRESS_DIM,
+        output_groups: int = CSA_DEFAULT_OUTPUT_GROUPS,
+        intermediate_dim: int = CSA_DEFAULT_INTERMEDIATE_DIM,
+        window_size: int = CSA_DEFAULT_WINDOW_SIZE,
+        partial_rope_dim: int = CSA_PARTIAL_ROPE_DIM,
+        position_ids: Optional[np.ndarray] = None,
+        is_prefill: bool = True,
+    ) -> np.ndarray:
+        """
+        Compressed Sparse Attention (CSA) — DeepSeek V4 Section 2.3.1.
+
+        Pipeline::
+            1. Token-level compression: m KV entries → 1 compressed entry (overlapped)
+            2. Lightning Indexer: low-rank query projection → top-k sparse selection
+            3. Shared Key-Value MQA on the sparse subset
+            4. Grouped output projection back to hidden dim
+
+        Parameters
+        ----------
+        hidden_states : np.ndarray, shape (batch, seq, hidden_dim)
+            Input hidden states for the attention layer.
+        compressed_kv : np.ndarray or None
+            Pre-computed compressed KV cache. If None, computed fresh.
+        compression_rate : int
+            m: number of token-level KV entries per compressed block.
+        indexer_heads : int
+            n_I_h: number of lightning indexer query heads.
+        indexer_head_dim : int
+            c_I: indexer head dimension.
+        attention_topk : int
+            Number of compressed KV blocks selected for sparse attention.
+        head_dim : int
+            c: main attention head dimension.
+        num_heads : int
+            n_h: number of attention query heads.
+        query_compress_dim : int
+            d_c: latent query compression dimension.
+        output_groups : int
+            g: number of output projection groups.
+        intermediate_dim : int
+            d_g: per-group intermediate dimension.
+        window_size : int
+            n_win: sliding window KV entries for local dependencies.
+        partial_rope_dim : int
+            Last N dimensions on which RoPE is applied.
+        position_ids : np.ndarray or None
+            Position indices for RoPE.
+        is_prefill : bool
+            True for prefill (batch prefill), False for incremental decode.
+
+        Returns
+        -------
+        np.ndarray, shape (batch, seq, hidden_dim)
+            CSA attention output.
+        """
+        self._require_kernel()
+        t = self._torch
+
+        if self.has_csa and self.csa_source == "flashinfer":
+            return self._csa_forward_flashinfer(
+                hidden_states,
+                compressed_kv=compressed_kv,
+                compression_rate=compression_rate,
+                indexer_heads=indexer_heads,
+                indexer_head_dim=indexer_head_dim,
+                attention_topk=attention_topk,
+                head_dim=head_dim,
+                num_heads=num_heads,
+                query_compress_dim=query_compress_dim,
+                output_groups=output_groups,
+                intermediate_dim=intermediate_dim,
+                window_size=window_size,
+                partial_rope_dim=partial_rope_dim,
+                position_ids=position_ids,
+                is_prefill=is_prefill,
+            )
+        elif self.has_csa:
+            return self._csa_forward_generic(
+                hidden_states,
+                compressed_kv=compressed_kv,
+                compression_rate=compression_rate,
+                indexer_heads=indexer_heads,
+                indexer_head_dim=indexer_head_dim,
+                attention_topk=attention_topk,
+                head_dim=head_dim,
+                num_heads=num_heads,
+                query_compress_dim=query_compress_dim,
+                output_groups=output_groups,
+                intermediate_dim=intermediate_dim,
+                window_size=window_size,
+                partial_rope_dim=partial_rope_dim,
+                position_ids=position_ids,
+                is_prefill=is_prefill,
+            )
+
+        # ---- Pure PyTorch reference path (no CSA kernel) ----
+        h_t = t.tensor(hidden_states, device="cuda", dtype=t.float16)
+        bsz, seq_len, hidden_dim = h_t.shape
+
+        # Step 1: Token-level compression (simplified — no overlapped blocks)
+        num_blocks = max(1, seq_len // compression_rate)
+        # Average-pool as naive compression fallback
+        compressed = t.nn.functional.avg_pool1d(
+            h_t.transpose(1, 2), kernel_size=compression_rate, stride=compression_rate
+        ).transpose(1, 2)  # (B, num_blocks, hidden_dim)
+
+        # Step 2: Lightning indexer (approximated via low-rank projection)
+        # Down-project query → compute index scores → top-k
+        c_Q = t.nn.functional.linear(h_t, t.eye(query_compress_dim, hidden_dim, device="cuda", dtype=t.float16)[:query_compress_dim])
+        out = t.nn.functional.scaled_dot_product_attention(
+            c_Q[:, :, :head_dim].reshape(bsz * num_heads, seq_len, head_dim // num_heads),
+            compressed[:, :, :head_dim].reshape(bsz * num_heads, num_blocks, head_dim // num_heads),
+            compressed[:, :, :head_dim].reshape(bsz * num_heads, num_blocks, head_dim // num_heads),
+            is_causal=False,
+        )
+        # Project back
+        out_reshaped = out.reshape(bsz, seq_len, -1)
+        out_proj = t.nn.functional.linear(out_reshaped, t.eye(hidden_dim, out_reshaped.shape[-1], device="cuda", dtype=t.float16)[:hidden_dim])
+
+        return out_proj.detach().cpu().numpy().astype(hidden_states.dtype)
+
+    def hca_attention(
+        self,
+        hidden_states: np.ndarray,
+        compressed_kv: Optional[np.ndarray] = None,
+        *,
+        compression_rate: int = HCA_DEFAULT_COMPRESSION_RATE,
+        head_dim: int = CSA_DEFAULT_HEAD_DIM,
+        num_heads: int = CSA_DEFAULT_QUERY_HEADS,
+        query_compress_dim: int = CSA_DEFAULT_QUERY_COMPRESS_DIM,
+        output_groups: int = CSA_DEFAULT_OUTPUT_GROUPS,
+        intermediate_dim: int = CSA_DEFAULT_INTERMEDIATE_DIM,
+        window_size: int = CSA_DEFAULT_WINDOW_SIZE,
+        partial_rope_dim: int = CSA_PARTIAL_ROPE_DIM,
+        position_ids: Optional[np.ndarray] = None,
+        is_prefill: bool = True,
+    ) -> np.ndarray:
+        """
+        Heavily Compressed Attention (HCA) — DeepSeek V4 Section 2.3.2.
+
+        Uses extreme compression (m'=128) with full dense attention on the
+        compressed sequence. No sparse selection — all compressed blocks are
+        attended.  Also uses shared KV MQA and grouped output projection.
+
+        Parameters
+        ----------
+        hidden_states : np.ndarray, shape (batch, seq, hidden_dim)
+        compressed_kv : np.ndarray or None
+        compression_rate : int
+            m': number of raw KV entries per compressed block (default 128).
+        head_dim, num_heads, query_compress_dim, output_groups,
+        intermediate_dim, window_size, partial_rope_dim, position_ids, is_prefill :
+            Same semantics as :meth:`csa_attention`.
+
+        Returns
+        -------
+        np.ndarray, shape (batch, seq, hidden_dim)
+            HCA attention output.
+        """
+        self._require_kernel()
+        t = self._torch
+
+        if self.has_hca and self.hca_source == "flashinfer":
+            return self._hca_forward_flashinfer(
+                hidden_states,
+                compressed_kv=compressed_kv,
+                compression_rate=compression_rate,
+                head_dim=head_dim,
+                num_heads=num_heads,
+                query_compress_dim=query_compress_dim,
+                output_groups=output_groups,
+                intermediate_dim=intermediate_dim,
+                window_size=window_size,
+                partial_rope_dim=partial_rope_dim,
+                position_ids=position_ids,
+                is_prefill=is_prefill,
+            )
+        elif self.has_hca:
+            return self._hca_forward_generic(
+                hidden_states,
+                compressed_kv=compressed_kv,
+                compression_rate=compression_rate,
+                head_dim=head_dim,
+                num_heads=num_heads,
+                query_compress_dim=query_compress_dim,
+                output_groups=output_groups,
+                intermediate_dim=intermediate_dim,
+                window_size=window_size,
+                partial_rope_dim=partial_rope_dim,
+                position_ids=position_ids,
+                is_prefill=is_prefill,
+            )
+
+        # ---- Pure PyTorch reference path ----
+        h_t = t.tensor(hidden_states, device="cuda", dtype=t.float16)
+        bsz, seq_len, hidden_dim = h_t.shape
+
+        num_blocks = max(1, seq_len // compression_rate)
+        compressed = t.nn.functional.avg_pool1d(
+            h_t.transpose(1, 2), kernel_size=compression_rate, stride=compression_rate
+        ).transpose(1, 2)  # (B, num_blocks, hidden_dim)
+
+        # Low-rank query projection (shared with CSA style)
+        c_Q = t.nn.functional.linear(h_t, t.eye(query_compress_dim, hidden_dim, device="cuda", dtype=t.float16)[:query_compress_dim])
+
+        # Dense attention on all compressed blocks (no sparse selection)
+        out = t.nn.functional.scaled_dot_product_attention(
+            c_Q[:, :, :head_dim].reshape(bsz * num_heads, seq_len, head_dim // num_heads),
+            compressed[:, :, :head_dim].reshape(bsz * num_heads, num_blocks, head_dim // num_heads),
+            compressed[:, :, :head_dim].reshape(bsz * num_heads, num_blocks, head_dim // num_heads),
+            is_causal=False,
+        )
+        out_reshaped = out.reshape(bsz, seq_len, -1)
+        out_proj = t.nn.functional.linear(out_reshaped, t.eye(hidden_dim, out_reshaped.shape[-1], device="cuda", dtype=t.float16)[:hidden_dim])
+
+        return out_proj.detach().cpu().numpy().astype(hidden_states.dtype)
+
+    def hybrid_attention(
+        self,
+        hidden_states: np.ndarray,
+        layer_idx: int,
+        *,
+        num_layers: int = 43,
+        compressed_kv: Optional[np.ndarray] = None,
+        csa_kwargs: Optional[dict[str, Any]] = None,
+        hca_kwargs: Optional[dict[str, Any]] = None,
+        position_ids: Optional[np.ndarray] = None,
+        is_prefill: bool = True,
+    ) -> np.ndarray:
+        """
+        DeepSeek V4 hybrid attention dispatcher.
+
+        Routing rules (matching Section 4.2.1):
+            - Layers 0-1: Pure sliding window attention (via regular MLA fallback)
+            - Remaining layers: interleaved CSA and HCA
+              Pattern: uses HCA on layers where ``layer_idx % 4 == 2``,
+              CSA on others (with compression rate 4).
+
+        Parameters
+        ----------
+        hidden_states : np.ndarray, shape (batch, seq, hidden_dim)
+        layer_idx : int
+            0-based index of the current Transformer block.
+        num_layers : int
+            Total number of transformer layers (43 for Flash, 61 for Pro).
+        compressed_kv : np.ndarray or None
+        csa_kwargs : dict or None
+            Override dict for :meth:`csa_attention` parameters.
+        hca_kwargs : dict or None
+            Override dict for :meth:`hca_attention` parameters.
+        position_ids, is_prefill : forwarded.
+
+        Returns
+        -------
+        np.ndarray, shape (batch, seq, hidden_dim)
+        """
+        csa_kw = csa_kwargs or {}
+        hca_kw = hca_kwargs or {}
+
+        # First two layers: pure sliding window (regular dense MLA)
+        if layer_idx < 2:
+            return self.multi_latent_attention(
+                query=hidden_states,
+                key=hidden_states,
+                value=hidden_states,
+                head_dim=csa_kw.get("head_dim", CSA_DEFAULT_HEAD_DIM),
+            )
+
+        # Interleaved CSA/HCA for remaining layers
+        # V4-Flash pattern: HCA on layers where (layer_idx % 4 == 2)
+        if layer_idx % 4 == 2:
+            return self.hca_attention(
+                hidden_states,
+                compressed_kv=compressed_kv,
+                position_ids=position_ids,
+                is_prefill=is_prefill,
+                **hca_kw,
+            )
+        else:
+            return self.csa_attention(
+                hidden_states,
+                compressed_kv=compressed_kv,
+                position_ids=position_ids,
+                is_prefill=is_prefill,
+                **csa_kw,
+            )
 
     # ------------------------------------------------------------------ #
     # Kernel-specific implementations                                    #

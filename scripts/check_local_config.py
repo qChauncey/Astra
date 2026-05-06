@@ -3,7 +3,7 @@
 import json
 import sys
 
-path = "/home/chauncey/deepseek-v4/config.json"
+path = "/home/chauncey/models/DeepSeek-V4-Flash/config.json"
 try:
     with open(path) as f:
         d = json.load(f)

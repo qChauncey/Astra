@@ -2,7 +2,7 @@
 """Inspect DeepSeek-V2 model tensor naming format."""
 import json
 
-index_path = "/home/chauncey/deepseek-v4/model.safetensors.index.json"
+index_path = "/home/chauncey/models/DeepSeek-V4-Flash/model.safetensors.index.json"
 with open(index_path) as f:
     data = json.load(f)
 

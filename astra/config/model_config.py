@@ -28,8 +28,11 @@ from typing import Dict, Optional
 
 class AttentionType(enum.Enum):
     """Supported attention variants."""
-    MLA = "mla"          # Multi-head Latent Attention (DeepSeek-V3/V4)
+    MLA = "mla"          # Multi-head Latent Attention (DeepSeek-V3)
     GQA = "gqa"          # Grouped Query Attention (MiniMax-M2, Qwen2, Llama-3)
+    CSA = "csa"          # Compressed Sparse Attention (DeepSeek-V4)
+    HCA = "hca"          # Heavily Compressed Attention (DeepSeek-V4)
+    HYBRID_CSA_HCA = "hybrid_csa_hca"  # Interleaved CSA+HCA (DeepSeek-V4 series)
 
 
 class QuantizationType(enum.Enum):
@@ -86,6 +89,16 @@ class ModelConfig:
     use_qk_norm: bool = False
     use_routing_bias: bool = False
 
+    # ---- CSA / HCA (Compressed Sparse / Heavily Compressed Attention) ----
+    csa_compression_rate: int = 0           # m: compress every m tokens (0 = disabled)
+    hca_compression_rate: int = 0           # m': heavy compress rate (0 = disabled)
+    csa_lightning_indexer_heads: int = 0    # n_I_h: indexer query heads for CSA
+    csa_lightning_head_dim: int = 0         # c_I: indexer head dimension
+    csa_sparse_topk: int = 0                # top-k compressed KV entries for sparse attn
+    query_compression_dim: int = 0          # d_c: latent dimension for query compression
+    output_projection_groups: int = 0       # g: grouped output projection groups
+    sliding_window_size: int = 0            # n_win: sliding window KV entries
+
     # ---- MTP / speculative decoding ----
     use_mtp: bool = False
     num_mtp_modules: int = 0
@@ -95,7 +108,7 @@ class ModelConfig:
     ktransformers_supported: bool = True
     ktransformers_arch_name: str = ""
     kt_method: str = ""                     # e.g. "MXFP4" for V4-Flash CPU/GPU split
-    attention_variant: str = "standard"     # e.g. "nsa_sparse_mla" for V4-Flash NSA
+    attention_variant: str = "standard"     # e.g. "hybrid_csa_hca" for V4 series
     kt_num_gpu_experts: int = 144           # routed experts kept on GPU (MXFP4 path)
     kt_cpuinfer: int = 8                    # CPU inference workers for offline experts
     kt_threadpool_count: int = 2            # threadpool count for CPU inference
@@ -141,42 +154,118 @@ class ModelConfig:
 DEEPSEEK_V4_FLASH = ModelConfig(
     model_id="deepseek-ai/DeepSeek-V4-Flash",
     display_name="DeepSeek-V4-Flash",
-    arch_type="DeepseekV3ForCausalLM",
-    model_type="deepseek_v3",
-    hidden_dim=7168,
-    num_layers=61,
-    head_dim=128,
-    num_attention_heads=128,
-    num_key_value_heads=128,          # MLA: full heads for latent compression
-    intermediate_size=18432,
+    arch_type="DeepseekV4ForCausalLM",
+    model_type="deepseek_v4",
+    # ---- Flash architecture (284B total, 13B activated) ----
+    # Source: DeepSeek-V4 paper, Section 4.2.1 (Table 1)
+    hidden_dim=4096,                   # d (Flash: 4096, Pro: 7168)
+    num_layers=43,                     # 43 Transformer blocks
+    head_dim=512,                      # c — shared KV head dimension (not 128 MLA)
+    num_attention_heads=64,            # n_h — shared KV query heads
+    num_key_value_heads=1,             # MQA: single KV head
+    intermediate_size=2048,            # per-expert intermediate (Flash: 2048)
     vocab_size=129280,
-    max_position_embeddings=163840,
-    rope_theta=500000.0,
-    rotary_dim=64,
+    max_position_embeddings=1048576,   # 1M native context
+    rope_theta=10000.0,
+    rotary_dim=64,                     # partial RoPE (last 64 dims)
     rms_norm_eps=1e-6,
-    attention_type=AttentionType.MLA,
+    attention_type=AttentionType.HYBRID_CSA_HCA,
     use_qk_norm=True,
+    # ---- MoE (Flash: 1 shared + 256 routed, top-6) ----
     num_local_experts=256,
-    num_experts_per_tok=8,
-    num_shared_experts=2,
-    scoring_func="sigmoid",
+    num_experts_per_tok=6,             # top-6 experts per token
+    num_shared_experts=1,              # single shared expert
+    scoring_func="sqrtsoftplus",       # sqrt(Softplus(·)) replaces Sigmoid (Sec 2.1)
     use_routing_bias=True,
+    # ---- CSA parameters (Flash, Sec 4.2.1) ----
+    csa_compression_rate=4,            # m: compress every 4 tokens
+    hca_compression_rate=128,          # m': heavy compress every 128 tokens
+    csa_lightning_indexer_heads=64,    # n_I_h
+    csa_lightning_head_dim=128,        # c_I
+    csa_sparse_topk=512,               # top-k compressed KV for sparse attn
+    query_compression_dim=1024,        # d_c (Flash: 1024)
+    output_projection_groups=8,        # g
+    sliding_window_size=128,           # n_win
+    # ---- MTP ----
     use_mtp=True,
-    num_mtp_modules=3,
+    num_mtp_modules=1,                 # Flash: 1 MTP depth
     mtp_transformer_layers=1,
+    # ---- Quantization ----
     native_quant=QuantizationType.MXFP4,
+    # ---- KTransformers integration ----
     ktransformers_supported=True,
-    ktransformers_arch_name="deepseek_v3",
+    ktransformers_arch_name="deepseek_v4",
     kt_method="MXFP4",
-    attention_variant="nsa_sparse_mla",
+    attention_variant="hybrid_csa_hca",
     kt_num_gpu_experts=144,
     kt_cpuinfer=8,
     kt_threadpool_count=2,
-    num_safetensors_shards=163,
-    total_size_gb=671.0,
+    # ---- File layout ----
+    num_safetensors_shards=46,
+    total_size_gb=284.0,               # 284B total params
     auto_map={
-        "AutoConfig": "configuration_deepseek.DeepseekV3Config",
-        "AutoModelForCausalLM": "modeling_deepseek.DeepseekV3ForCausalLM",
+        "AutoConfig": "configuration_deepseek.DeepseekV4Config",
+        "AutoModelForCausalLM": "modeling_deepseek.DeepseekV4ForCausalLM",
+    },
+)
+
+DEEPSEEK_V4_PRO = ModelConfig(
+    model_id="deepseek-ai/DeepSeek-V4-Pro",
+    display_name="DeepSeek-V4-Pro",
+    arch_type="DeepseekV4ForCausalLM",
+    model_type="deepseek_v4",
+    # ---- Pro architecture (1.6T total, 49B activated) ----
+    # Source: DeepSeek-V4 paper, Section 4.2.1
+    hidden_dim=7168,                   # d (Pro: 7168)
+    num_layers=61,                     # 61 Transformer blocks
+    head_dim=512,                      # c — shared KV head dimension
+    num_attention_heads=128,           # n_h
+    num_key_value_heads=128,           # MQA
+    intermediate_size=3072,            # per-expert intermediate (Pro: 3072)
+    vocab_size=129280,
+    max_position_embeddings=1048576,   # 1M native context
+    rope_theta=500000.0,
+    rotary_dim=64,                     # partial RoPE (last 64 dims)
+    rms_norm_eps=1e-6,
+    attention_type=AttentionType.HYBRID_CSA_HCA,
+    use_qk_norm=True,
+    # ---- MoE (Pro: 1 shared + 384 routed, top-6) ----
+    num_local_experts=384,
+    num_experts_per_tok=6,             # top-6 experts per token
+    num_shared_experts=1,              # single shared expert
+    scoring_func="sqrtsoftplus",       # sqrt(Softplus(·))
+    use_routing_bias=True,
+    # ---- CSA parameters (Pro, Sec 4.2.1) ----
+    csa_compression_rate=4,            # m: compress every 4 tokens
+    hca_compression_rate=128,          # m': heavy compress every 128 tokens
+    csa_lightning_indexer_heads=64,    # n_I_h
+    csa_lightning_head_dim=128,        # c_I
+    csa_sparse_topk=1024,              # top-k (Pro: 1024 vs Flash: 512)
+    query_compression_dim=1536,        # d_c (Pro: 1536 vs Flash: 1024)
+    output_projection_groups=16,       # g (Pro: 16 vs Flash: 8)
+    sliding_window_size=128,           # n_win
+    # ---- MTP ----
+    use_mtp=True,
+    num_mtp_modules=1,                 # Pro: 1 MTP depth
+    mtp_transformer_layers=1,
+    # ---- mHC (Manifold-Constrained Hyper-Connections) ----
+    # n_hc=4 expansion, t_max=20 Sinkhorn-Knopp iterations (Sec 2.2)
+    # ---- Quantization ----
+    native_quant=QuantizationType.MXFP4,
+    # ---- KTransformers integration ----
+    ktransformers_supported=True,
+    ktransformers_arch_name="deepseek_v4",
+    kt_method="MXFP4",
+    attention_variant="hybrid_csa_hca",
+    kt_num_gpu_experts=144,
+    kt_cpuinfer=8,
+    kt_threadpool_count=2,
+    # ---- File layout ----
+    num_safetensors_shards=163,
+    total_size_gb=1600.0,              # 1.6T total params
+    auto_map={
+        "AutoConfig": "configuration_deepseek.DeepseekV4Config",
+        "AutoModelForCausalLM": "modeling_deepseek.DeepseekV4ForCausalLM",
     },
 )
 
@@ -225,7 +314,10 @@ MINIMAX_M2_5 = ModelConfig(
 MODEL_CONFIGS: Dict[str, ModelConfig] = {
     "deepseek-ai/DeepSeek-V4-Flash": DEEPSEEK_V4_FLASH,
     "deepseek-v4-flash": DEEPSEEK_V4_FLASH,
-    "deepseekv4": DEEPSEEK_V4_FLASH,
+    "deepseek-ai/DeepSeek-V4-Pro": DEEPSEEK_V4_PRO,
+    "deepseek-v4-pro": DEEPSEEK_V4_PRO,
+    "deepseekv4": DEEPSEEK_V4_PRO,    # Default alias → Pro (strongest)
+    "deepseek-v4": DEEPSEEK_V4_PRO,
     "MiniMaxAI/MiniMax-M2.5": MINIMAX_M2_5,
     "minimax-m2.5": MINIMAX_M2_5,
     "minimax-m2-5": MINIMAX_M2_5,

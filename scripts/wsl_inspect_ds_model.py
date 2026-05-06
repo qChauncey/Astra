@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Inspect the DeepSeek model at /home/chauncey/deepseek-v4/config.json"""
+"""Inspect the DeepSeek model at /home/chauncey/models/DeepSeek-V4-Flash/config.json"""
 import json
 
-with open('/home/chauncey/deepseek-v4/config.json') as f:
+with open('/home/chauncey/models/DeepSeek-V4-Flash/config.json') as f:
     c = json.load(f)
 
 print("=" * 60)
