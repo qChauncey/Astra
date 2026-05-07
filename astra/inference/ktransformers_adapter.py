@@ -195,11 +195,20 @@ def detect_hca_kernels() -> Tuple[bool, str]:
 
 def detect_ktransformers() -> dict[str, Any]:
     """
-    Probe the Python environment for ktransformers kernel availability.
+    Probe the Python environment for GPU backend availability.
+
+    **Despite the legacy name, this function probes ALL GPU backends**
+    (ktransformers → kt_kernel → torch_fallback), not just ktransformers.
+    ``available=True`` means *at least one* backend (including torch_fallback)
+    is usable — it does **not** mean the real KTransformers C++ binding is present.
+
+    Use ``result["backend"]`` to determine which tier was detected:
+    ``"ktransformers_cpp"`` (real C++), ``"kt_kernel"`` (low-level kernel),
+    or ``"torch_fallback"`` (PyTorch GPU fallback, ~10–20× slower than native).
 
     Returns a dict with keys:
         available : bool
-            ``True`` if at least one kernel backend is usable.
+            ``True`` if at least one kernel backend is usable (including torch_fallback).
         backend : str
             ``"ktransformers_cpp"``, ``"kt_kernel"``, ``"torch_fallback"``,
             or ``"unavailable"``.
