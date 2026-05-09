@@ -35,7 +35,7 @@ Usage::
 from __future__ import annotations
 
 import threading
-from typing import Dict
+from typing import Dict, Optional
 
 import numpy as np
 
@@ -102,6 +102,13 @@ class SharedExpertCache:
         self._pinned: set[int] = set()
         self._access_order: list[int] = []
         self._lock = threading.Lock()
+
+        # Cross-layer intermediate cache
+        self._cross_cache: Dict[str, np.ndarray] = {}
+        self._cross_access_order: list[str] = []
+        self._cross_max: int = 64
+        self._cross_hit_count = 0
+        self._cross_miss_count = 0
 
     # ------------------------------------------------------------------ #
     # Cache management                                                      #
@@ -188,3 +195,60 @@ class SharedExpertCache:
     @staticmethod
     def _silu(x: np.ndarray) -> np.ndarray:
         return x / (1.0 + np.exp(-x))
+
+    # ------------------------------------------------------------------ #
+    # Cross-layer intermediate cache (Phase 8)                              #
+    # ------------------------------------------------------------------ #
+
+    def cross_layer_store(self, key: str, hidden: np.ndarray) -> None:
+        """Store a hidden-state intermediate under a namespace key.
+
+        Key format is typically ``"layer_N:expert_E"``.  Entries are
+        evicted in LRU order when ``_cross_max`` is exceeded.
+        """
+        with self._lock:
+            if len(self._cross_cache) >= self._cross_max:
+                self._cross_evict_lru()
+            self._cross_cache[key] = hidden.copy()
+            self._cross_touch(key)
+
+    def cross_layer_lookup(self, key: str) -> Optional[np.ndarray]:
+        """Return cached intermediate for *key*, or ``None`` on miss.
+
+        A hit refreshes the LRU position of the entry.
+        """
+        with self._lock:
+            if key in self._cross_cache:
+                self._cross_hit_count += 1
+                self._cross_touch(key)
+                return self._cross_cache[key]
+            self._cross_miss_count += 1
+            return None
+
+    def cross_layer_warmup(self, entries: Dict[str, np.ndarray]) -> None:
+        """Pre-fill the cross-layer cache with a batch of *entries*."""
+        with self._lock:
+            for key, hidden in entries.items():
+                if key in self._cross_cache:
+                    self._cross_touch(key)
+                else:
+                    if len(self._cross_cache) >= self._cross_max:
+                        self._cross_evict_lru()
+                    self._cross_cache[key] = hidden.copy()
+                    self._cross_access_order.append(key)
+
+    # ------------------------------------------------------------------ #
+    # Cross-layer helpers (callers hold _lock)                              #
+    # ------------------------------------------------------------------ #
+
+    def _cross_touch(self, key: str) -> None:
+        if key in self._cross_access_order:
+            self._cross_access_order.remove(key)
+        self._cross_access_order.append(key)
+
+    def _cross_evict_lru(self) -> None:
+        for key in self._cross_access_order:
+            del self._cross_cache[key]
+            self._cross_access_order.remove(key)
+            return
+        raise RuntimeError("Cross-layer cache is empty; cannot evict")
