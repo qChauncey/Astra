@@ -412,11 +412,11 @@ class TestModelConfigsRegistry:
 class TestGetModelConfig:
     def test_default_returns_default_model(self):
         cfg = get_model_config()
-        assert cfg.model_id == "MiniMaxAI/MiniMax-M2.5"
+        assert cfg.model_id == "deepseek-ai/DeepSeek-V4-Flash"
 
     def test_none_returns_default_model(self):
         cfg = get_model_config(None)
-        assert cfg.model_id == "MiniMaxAI/MiniMax-M2.5"
+        assert cfg.model_id == "deepseek-ai/DeepSeek-V4-Flash"
 
     def test_canonical_model_id(self):
         cfg = get_model_config("deepseek-ai/DeepSeek-V4-Flash")
@@ -504,7 +504,6 @@ class TestRegisterModelConfig:
             MODEL_CONFIGS.pop("newmodel", None)
 
     def test_register_overwrites_existing(self):
-        from astra.config.model_config import MINIMAX_M2_5
         original = MODEL_CONFIGS["minimax-m2.5"]
         new_cfg = ModelConfig(
             model_id="MiniMaxAI/MiniMax-M2.5",

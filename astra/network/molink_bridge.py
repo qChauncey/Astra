@@ -70,6 +70,8 @@ from dataclasses import dataclass, field
 from enum import Enum, auto
 from typing import Any, Dict, List, Optional, Tuple
 
+import numpy as np
+
 logger = logging.getLogger("astra.network.molink")
 
 
@@ -604,7 +606,8 @@ class MoLinkMaster:
 
         # Dynamically adjust micro-batch count
         if self._scheduler is not None and batches:
-            sample_batch = batches[0]
+            # Inspect first batch to dynamically adjust micro-batch count
+            _ = batches[0]
             batch_size = 1  # default
             seq_len = 256   # default
             self._scheduler.recompute(batch_size, seq_len)
