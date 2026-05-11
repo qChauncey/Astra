@@ -163,7 +163,7 @@ def main():
     if os.path.isdir(kt_check):
         all_ok &= check("KTransformers installed", True)
     else:
-        all_ok &= check("KTransformers installed", False, f"Expected at ~/ktransformers")
+        all_ok &= check("KTransformers installed", False, "Expected at ~/ktransformers")
 
     # Final summary
     print("\n" + "=" * 60)

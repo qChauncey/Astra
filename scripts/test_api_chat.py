@@ -1,5 +1,8 @@
 """Quick test of the running Astra API endpoint."""
-import httpx, json, sys, time
+import httpx
+import json
+import sys
+import time
 
 url = "http://localhost:8080/v1/chat/completions"
 payload = {
