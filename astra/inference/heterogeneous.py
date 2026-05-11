@@ -48,11 +48,17 @@ from __future__ import annotations
 import os
 import time
 from dataclasses import dataclass
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 import numpy as np
 
 from ..serialization.tensor_pack import TensorPacket
+# Lazy torch import for KT-Kernel MoE tensor conversion
+try:
+    import torch as _torch
+except ImportError:
+    _torch = None  # type: ignore[assignment]
+
 from ..config.model_config import (
     ModelConfig,
     get_model_config,
@@ -189,10 +195,6 @@ def _detect_backend() -> tuple:
     try:
         import torch
         if torch.cuda.is_available():
-            # Compute-capability guard: cu124 PyTorch wheels ship kernels
-            # for sm_50–sm_90 only.  Blackwell GPUs (sm_100+, e.g. RTX 50xx)
-            # require a newer PyTorch build.  Skip them deterministically
-            # rather than relying on catching an async CUDA kernel error.
             cap_major = torch.cuda.get_device_capability()[0]
             if cap_major < 10:
                 # Smoke test: verify the installed PyTorch build actually
@@ -200,8 +202,6 @@ def _detect_backend() -> tuple:
                 # the exact kernel path used by rms_layer_norm():
                 #   3D float32 tensor → **2 → mean(dim=-1, keepdim=True) →
                 #   sqrt → division → multiply.
-                # A simple 2D reduction may pass sm_120 while the 3D keepdim
-                # variant fails, so we mirror the real call precisely.
                 try:
                     t3d = torch.randn(4, 16, 64, device="cuda",
                                       dtype=torch.float32)
@@ -212,6 +212,13 @@ def _detect_backend() -> tuple:
                     pass  # unsupported → fall through
                 else:
                     return "pytorch_cuda", torch
+            else:
+                # Blackwell GPUs (SM 12.x, RTX 50xx): newer PyTorch builds
+                # (2.9+ cu128) ship SM 12.x kernels for common ops.  flashinfer
+                # may emit "SM 12.x requires CUDA >= 12.9" warnings for
+                # precompiled kernels; those are non-fatal for the PyTorch
+                # attention/dense path used by this backend.
+                return "pytorch_cuda", torch
     except ImportError:
         pass
 
@@ -654,9 +661,12 @@ class HeterogeneousEngine:
         self._kt_enable_dynamic_expert_update = kt_enable_dynamic_expert_update
         self._attention_backend = attention_backend
         self._disable_shared_experts_fusion = disable_shared_experts_fusion
-        self._model_config = model_config or get_model_config(
-            "deepseek-v4-flash" if device_map.num_layers > 50 else "test-small"
-        )
+        self._model_config = model_config or get_model_config()
+
+        # ── KT-Kernel MoE CPU wrapper (lazy init per layer) ──
+        self._kt_moe_wrappers: Dict[int, Any] = {}
+        self._kt_moe_available: bool = bool(kt_method and kt_weight_path)
+
 
         # Performance counters for GPU utilisation monitoring
         self._gpu_flops_total: float = 0.0
@@ -1026,6 +1036,36 @@ class HeterogeneousEngine:
 
         return (hidden.astype(np.float32) + out).astype(hidden.dtype)
 
+    def _get_or_create_kt_wrapper(self, layer_idx: int) -> Any:
+        """Lazily create a KTMoEWrapper for the given layer on first access.
+
+        The wrapper loads MoE expert weights from the model directory and
+        provides a fast CPU batched-forward (via kt_kernel C++ extension).
+        """
+        if layer_idx not in self._kt_moe_wrappers:
+            if not self._kt_moe_available:
+                raise RuntimeError(
+                    "KT-MoE requested but kt_method/kt_weight_path not set; "
+                    "pass them to HeterogeneousEngine(kt_method=..., kt_weight_path=...)"
+                )
+            try:
+                from ktransformers.kt_kernel import KTMoEWrapper  # type: ignore[import]
+            except ImportError:
+                raise ImportError(
+                    "ktransformers.kt_kernel not importable. "
+                    "Please build ktransformers with --kt-kernel for CPU MoE support."
+                )
+            model_dir = self._kt_weight_path
+            self._kt_moe_wrappers[layer_idx] = KTMoEWrapper(
+                model_dir=str(model_dir),
+                layer_idx=layer_idx,
+                method=self._kt_method,
+                num_gpu_experts=self._kt_num_gpu_experts,
+                cpuinfer=self._kt_cpuinfer,
+                threadpool_count=self._kt_threadpool_count,
+            )
+        return self._kt_moe_wrappers[layer_idx]
+
     def _moe_forward(
         self,
         hidden: np.ndarray,
@@ -1035,9 +1075,29 @@ class HeterogeneousEngine:
         """
         CPU-side MoE FFN sub-layer.
 
+        Two paths:
+          a) KT-Kernel path: uses KTMoEWrapper for fast CPU batched MoE
+             (when kt_method and kt_weight_path are configured).
+          b) Pure-Python path: uses SharedExpertCache with per-token looping
+             (fallback for testing / mock pipeline).
+
         For each token, runs all selected experts and combines outputs.
         Shared experts (IDs 0, 1) are always included.
         """
+        if self._kt_moe_available:
+            # ── KT-Kernel path: batched CPU MoE ──
+            if _torch is None:
+                raise RuntimeError(
+                    "PyTorch is required for KT-Kernel MoE tensor conversion. "
+                    "Install with: pip install torch"
+                )
+            wrapper = self._get_or_create_kt_wrapper(layer_idx)
+            hidden_t = _torch.tensor(hidden, dtype=_torch.float32)
+            experts_t = _torch.tensor(selected_experts.astype(np.int32), dtype=_torch.long)
+            moe_out: np.ndarray = wrapper.forward(hidden_t, experts_t).cpu().numpy()
+            return (hidden.astype(np.float32) + moe_out.astype(np.float32)).astype(hidden.dtype)
+
+        # ── Pure-Python fallback (SharedExpertCache) ──
         seq_len = hidden.shape[0]
         out = np.zeros_like(hidden, dtype=np.float32)
 
@@ -1184,6 +1244,15 @@ class HeterogeneousEngine:
         for cache in self._kv_cache.values():
             cache.clear()
         self._kv_cache.clear()
+
+    def cleanup(self) -> None:
+        """Release KT-Kernel MoE wrappers and free resources."""
+        for wrapper in self._kt_moe_wrappers.values():
+            try:
+                wrapper.close()
+            except Exception:
+                pass
+        self._kt_moe_wrappers.clear()
 
     def stats(self) -> dict:
         """Return engine statistics including GPU utilisation metrics."""

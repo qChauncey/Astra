@@ -265,7 +265,7 @@ batching, speculative decoding, expert replication).
 |------|---------|--------|
 | Single-machine single-node | `python scripts/run_node.py --mode offline --gpu --api-port 8080` | 🟢 Active |
 | Single-machine multi-node mock (2-node gRPC) | `python mock_pipeline.py --phase 2` | 🟢 Active |
-| Full test suite (CPU CI) | `python -m pytest tests/ -v` | 511 collected |
+| Full test suite (CPU CI) | `python -m pytest tests/ -v` | 582 collected |
 | Real-weight lightweight verification (MiniMax-M2.5) | `scripts/verify_real_weights_small.py` | 🟢 Active (single shard, single layer) |
 | Hardware test workflow (GPU) | `hardware_test.yml` (4 jobs) | Pending self-hosted GPU runner |
 
@@ -331,6 +331,14 @@ batching, speculative decoding, expert replication).
 | Implement GPU utilisation-based load shedding in `PipelineOrchestrator` | ✓ Complete | `astra/network/orchestrator.py` — `_is_node_overloaded()`, `_node_load_score()`, threshold config |
 | Add cluster-affinity grouping threshold to `GeoAwareMoERouter` | ✓ Complete | `astra/routing/cluster_affinity.py` — `ClusterAffinity` with EMA RTT, proximity groups |
 | **Prerequisite** | 🔒 Blocked | Multi-node deployment with real GPU utilisation data and expert-frequency telemetry |
+
+#### 7.3.5 Cross-Layer Expert Cache (Gated Cross-Layer Cache)
+**Effort:** Small — reuses existing `SharedExpertCache` infrastructure.
+
+| Task | Status | Notes |
+|------|--------|-------|
+| Gated cross-layer cache (cross-Transformer-layer expert intermediate result sharing) | ✓ Complete | `astra/inference/shared_expert_cache.py` — `CrossLayerExpertCache` with similarity-based gating, warmup fill, and LRU eviction |
+| Cross-layer cache tests (8 items) | ✓ Complete | `tests/test_shared_expert_cache.py` — caching, gating threshold, layer independence, statistics tracking |
 
 ---
 
@@ -410,7 +418,7 @@ sustainable decentralized inference network.
 
 | Task | Status | Notes |
 |------|--------|-------|
-| DeepSeek-V4-Flash MXFP4 MoE + NSA MLA via KT-Kernel | Available | `--kt-method MXFP4` via KTransformers + SGLang; `DeepSeekV4FlashConfig` preset available |
+| DeepSeek-V4-Flash MXFP4 MoE + NSA MLA via KT-Kernel | Config ready; kernel blocked 🔒 | Preset in `model_config.py`; `detect_ktransformers()` probes for `mxfp4_routed_moe` + `nsa_sparse_mla`; real KTransformers C++ binding blocked on hardware (Phase 7.3.1) |
 | Per-model `DeviceMap` profiles (memory footprint, layer count, head config) | Planned | Separate profile files under `astra/inference/profiles/` |
 | Model registry API (`GET /v1/models` returns all loaded checkpoints) | Planned | Extend `openai_compat.py` — already returns one model |
 | Hot-swap model loading (load new checkpoint without restarting nodes) | Planned | WeightLoader + signal-based reload |
@@ -463,7 +471,7 @@ sustainable decentralized inference network.
 
 | Layer | Tool | Current Status | Coverage Target |
 |-----|------|---------|---------|
-| Unit (CPU) | pytest | ✅ 511 collected | Serialization, LRU cache, Haversine + real RTT, DHT, Engram, Peer Identity, Weight Manifest, gRPC TLS, HeterogeneousEngine, Tokenizer, KVTransfer, OpenAI API, Phase 6 dashboard, Continuous Batching, Speculative Decoding, Expert Replication, Weight Loader, Environment Checker |
+| Unit (CPU) | pytest | ✅ 582 collected | Serialization, LRU cache, Cross-Layer Expert Cache, Haversine + real RTT, DHT, Engram, Peer Identity, Weight Manifest, gRPC TLS, HeterogeneousEngine, Tokenizer, KVTransfer, OpenAI API, Phase 6 dashboard, Continuous Batching, Speculative Decoding, Expert Replication, Weight Loader, Environment Checker |
 | Integration (local) | pytest + threading | ✅ Covered | mock_pipeline.py Phase 1 & 2 |
 | Hardware Integration | Self-hosted GPU Runner | ❌ Not configured | KTransformers C++ kernels, real-weight numerical alignment |
 | Load Test | scripts/load_test.py (asyncio+httpx) | ✅ Implemented | 100 concurrent requests, throughput & P99 latency |

@@ -6,17 +6,17 @@
 
 ## 1. 当前测试状态（诚实评估）
 
-### 1.1 已通过的自动化测试（574 收集，0 失败，1 跳过，可在 CI 中运行）
+### 1.1 已通过的自动化测试（582 收集，0 失败，1 跳过，可在 CI 中运行）
 
 ```
 python -m pytest tests/ -v
-# 574 collected, 0 failed, 1 skipped in ~35s（纯 CPU / NumPy 环境）
+# 582 collected, 0 failed, 1 skipped in ~35s（纯 CPU / NumPy 环境）
 ```
 
 | 测试文件 | 覆盖范围 | 测试数 |
 |---------|---------|--------|
 | `test_serialization.py` | TensorPacket 序列化往返、边界情况、CRC 校验 | 14 |
-| `test_shared_expert_cache.py` | LRU 淘汰、固定策略、SiLU FFN 前向计算 | 11 |
+| `test_shared_expert_cache.py` | LRU 淘汰、固定策略、SiLU FFN 前向计算、跨层专家缓存 | 19 |
 | `test_geo_router.py` | Haversine 距离、门控输出形状、地理最近节点分发 | 12 |
 | `test_dht.py` | TTL 过期、订阅回调、节点注销、专家/层查询 | 14 |
 | `test_pipeline_grpc.py` | gRPC 单跳/双跳/流式、Ping、CRC 校验（间接调用 HeterogeneousEngine） | 10 |
@@ -42,10 +42,10 @@ python -m pytest tests/ -v
 | `test_model_config.py` | Multi-model config presets (DeepSeek-V4-Flash, MiniMax-M2.5), weight resolution, dtype mapping, layer counts, KV head config | 37 |
 | `test_batch_utils.py` | Sequence pad/unpad, attention mask generation, causal mask creation, mixed-length batch support | 26 |
 
-### 1.2 已填补的覆盖空缺（Phase 3–7 完成）
+### 1.2 已填补的覆盖空缺（Phase 3–8 完成）
 
-所有在 Phase 1/2 标记为"待补充"的测试文件现已编写并纳入 CI 流水线。`test_heterogeneous.py`、`test_kv_transfer.py`、`test_api.py`、`test_differential_privacy.py`、`test_tee.py`、`test_tls.py`、`test_hivemind_bridge.py`、`test_phase6.py`、`test_identity.py`、`test_rtt.py`、`test_engram.py`、`test_weight_loader.py`、`test_weight_manifest.py`、`test_tokenizer.py`、`test_speculative.py`、`test_continuous_batching.py`、`test_expert_replication.py`、`test_model_config.py`、`test_batch_utils.py` 直接测试各自模块，共计 574 收集（573 通过，0 失败，1 跳过）。
-（574 collected：Phase 1: 60 + Phase 2: 16 + Phase 3: 177 + Phase 4: 89 + Phase 5: 36 + Phase 6: 47 + Phase 7: 149）
+所有在 Phase 1/2 标记为"待补充"的测试文件现已编写并纳入 CI 流水线。`test_heterogeneous.py`、`test_kv_transfer.py`、`test_api.py`、`test_differential_privacy.py`、`test_tee.py`、`test_tls.py`、`test_hivemind_bridge.py`、`test_phase6.py`、`test_identity.py`、`test_rtt.py`、`test_engram.py`、`test_weight_loader.py`、`test_weight_manifest.py`、`test_tokenizer.py`、`test_speculative.py`、`test_continuous_batching.py`、`test_expert_replication.py`、`test_model_config.py`、`test_batch_utils.py` 直接测试各自模块，共计 582 收集（581 通过，0 失败，1 跳过）。
+（582 collected：Phase 1: 60 + Phase 2: 16 + Phase 3: 177 + Phase 4: 89 + Phase 5: 36 + Phase 6: 47 + Phase 7: 149 + Phase 8: 8）
 
 #### 剩余覆盖空缺（待补充）
 
@@ -219,7 +219,21 @@ class TestExpertReplication:
     test_health_check()                      # 健康检查
 ```
 
-### 2.11 硬件集成测试（自托管 Runner，待配置）
+### 2.11 `test_shared_expert_cache.py` 跨层专家缓存测试（✅ 已完成 — Phase 8）
+
+```python
+class TestCrossLayerExpertCache:
+    test_gated_cache_creation()              # 跨层缓存创建
+    test_compute_similarity_keys()           # 层间相似度计算
+    test_cache_hit_and_miss()                # 缓存命中/未命中逻辑
+    test_lru_eviction()                      # LRU 淘汰策略
+    test_warmup_fill()                       # 预热填充
+    test_gate_threshold()                    # 门控阈值：低于阈值不缓存
+    test_layer_independence()                # 不同层独立缓存
+    test_statistics_tracking()               # 统计信息追踪
+```
+
+### 2.12 硬件集成测试（自托管 Runner，待配置）
 
 ```yaml
 # .github/workflows/hardware_test.yml（待创建）
@@ -248,18 +262,19 @@ jobs:
 │  Layer 3: 端到端集成（本地双进程 gRPC）          │  ← PR 合并前
 │  mock_pipeline.py Phase 1 & 2 作为 pytest 用例  │
 ├─────────────────────────────────────────────────┤
-│  Layer 2: 组件集成（现有 574 个测试）            │  ← 每次 push
+│  Layer 2: 组件集成（现有 582 个测试）            │  ← 每次 push
 │  序列化 · gRPC · DHT · Orchestrator ·           │
 │  HeterogeneousEngine · KVTransfer · API · DP ·  │
 │  TEE · TLS · HivemindBridge · Phase6 ·          │
 │  Identity · RTT · Engram · WeightLoader ·       │
 │  Speculative · ContinuousBatching ·             │
 │  ExpertReplication · Tokenizer · CheckEnv ·     │
-│  ModelConfig · BatchUtils                       │
+│  ModelConfig · BatchUtils · CrossLayerCache     │
 ├─────────────────────────────────────────────────┤
 │  Layer 1: 纯单元测试（✅ 已完成）                │  ← 每次 push
 │  HeterogeneousEngine · KVTransfer · API · DP ·  │
-│  TEE · TLS · Hivemind · Phase6 · Phase7         │
+│  TEE · TLS · Hivemind · Phase6 · Phase7 ·      │
+│  Phase8 · CrossLayerExpertCache                 │
 └─────────────────────────────────────────────────┘
 ```
 
@@ -295,6 +310,32 @@ python -m pytest tests/test_phase6.py -v
 # 运行 Phase 7 测试（推理引擎）
 python -m pytest tests/test_speculative.py tests/test_continuous_batching.py tests/test_expert_replication.py tests/test_model_config.py tests/test_batch_utils.py -v
 
+# 运行 Phase 8 跨层专家缓存测试
+python -m pytest tests/test_shared_expert_cache.py -v
+
 # 运行 mock pipeline 模拟（Phase 1 & 2 端到端脚本，非 pytest）
 python mock_pipeline.py --phase 1 --seq-len 16 --hidden-dim 256
 python mock_pipeline.py --phase 2 --seq-len 16 --hidden-dim 256
+```
+
+---
+
+## 5. 常见问题
+
+**Q: 为什么 pytest 收集的测试数与文档中的数字不完全一致？**
+A: pytest 收集数是权威来源（`pytest --co -q`）。文档数字作为参考快照，实际计数因参数化测试可能略有浮动。
+
+**Q: 测试运行时间？**
+A: 全量 582 个测试约 35 秒（纯 CPU / NumPy 环境）。
+
+**Q: 如何添加新测试？**
+A: 在 `tests/` 下创建 `test_<module>.py`，使用描述性类名和函数名。确保测试可在纯 CPU/NumPy 环境下运行，对 GPU 依赖使用 `@pytest.mark.skipif`。
+
+---
+
+## 6. 参考文档
+
+- [ROADMAP.md](ROADMAP.md) — Phase 状态与功能追踪
+- [ARCHITECTURE.md](ARCHITECTURE.md) — 系统设计与数据流
+- [INSTALL.md](INSTALL.md) — 安装与配置
+- [SECURITY.md](SECURITY.md) — 安全模型与 TEE 部署

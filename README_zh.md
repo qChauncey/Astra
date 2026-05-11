@@ -7,7 +7,7 @@
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org)
-[![Tests](https://img.shields.io/badge/tests-574%20collected-brightgreen)]()
+[![Tests](https://img.shields.io/badge/tests-582%20collected-brightgreen)]()
 [![CI](https://github.com/qchauncey/astra/actions/workflows/ci.yml/badge.svg)](.github/workflows/ci.yml)
 [![Status](https://img.shields.io/badge/status-Phase%201--7%20完成%20%7C%20Phase%208%20计划中-blue)]()
 
@@ -17,7 +17,7 @@
 - **[KTransformers](https://github.com/kvcache-ai/ktransformers)** 式的异构 GPU/CPU 计算拆分
 - **[hivemind](https://github.com/learning-at-home/hivemind)** DHT 用于节点发现和键值存储
 
-> **Alpha 阶段。** Phase 1–7 已完成并通过测试（573 通过，0 失败，1 跳过，574 收集项，CPU/NumPy CI）。当前验证目标：**MiniMax-M2.5**（126 GB，62 层，GQA，20 万词表）——真权加载、GQA 注意力、MoE 专家反量化及前向推理已端到端验证通过。`KTransformersAdapter`（`astra/inference/ktransformers_adapter.py`）在 PyTorch + CUDA 可用时提供 GPU 加速的 torch 回退方案，覆盖 MLA、RMSNorm、RoPE 和 matmul 操作（已在 WSL2 + NVIDIA RTX 5070 Ti 上验证）。KTransformers C++ 绑定（MLA 融合内核 + CUDA 算子）已编译并通过 `check_env.py` 检测；冒烟测试套件（`scripts/smoke_kt_adapter.py`）验证了所有适配器操作。`batch_utils.py` 提供序列填充/去填充和注意力掩码生成；`model_config.py` 提供多模型配置预设（DeepSeek-V4-Flash、MiniMax-M2.5 等）。Phase 7（真权加载、连续批处理、投机解码、专家复制、词表管理、集群亲和性、编排器负载均衡）已完成。Phase 8（高级前端界面：聊天交互界面、模式切换、模型/设备信息、Token 产出速度计）计划中。**DeepSeek-V4-Flash**（MXFP4 量化 MoE，NSA 稀疏 MLA）现已在 KTransformers + SGLang KT-Kernel 上获得支持——配置预设见 `astra/config/model_config.py` 中的 `DeepSeekV4FlashConfig`，一键构建环境见 `scripts/build_ktransformers.sh`。
+> **Alpha 阶段。** Phase 1–7 已完成并通过测试（581 通过，0 失败，1 跳过，582 收集项，CPU/NumPy CI）。当前验证目标：**MiniMax-M2.5**（126 GB，62 层，GQA，20 万词表）——真权加载、GQA 注意力、MoE 专家反量化及前向推理已端到端验证通过。`KTransformersAdapter`（`astra/inference/ktransformers_adapter.py`）在 PyTorch + CUDA 可用时提供 GPU 加速的 torch 回退方案，覆盖 MLA、RMSNorm、RoPE 和 matmul 操作（已在 WSL2 + NVIDIA RTX 5070 Ti 上验证）。KTransformers C++ 绑定（MLA 融合内核 + CUDA 算子）已编译并通过 `check_env.py` 检测；冒烟测试套件（`scripts/smoke_kt_adapter.py`）验证了所有适配器操作。`batch_utils.py` 提供序列填充/去填充和注意力掩码生成；`model_config.py` 提供多模型配置预设（DeepSeek-V4-Flash、MiniMax-M2.5 等）。Phase 7（真权加载、连续批处理、投机解码、专家复制、词表管理、集群亲和性、编排器负载均衡）已完成。Phase 8（高级前端界面：聊天交互界面、模式切换、模型/设备信息、Token 产出速度计）计划中。**DeepSeek-V4-Flash**（MXFP4 量化 MoE，NSA 稀疏 MLA）现已在 KTransformers + SGLang KT-Kernel 上获得支持——配置预设见 `astra/config/model_config.py` 中的 `DeepSeekV4FlashConfig`，一键构建环境见 `scripts/build_ktransformers.sh`。
 
 ---
 
@@ -131,7 +131,7 @@ python mock_pipeline.py --phase 1 --seq-len 16 --hidden-dim 256
 # Phase 2 — 双节点 gRPC 流水线
 python mock_pipeline.py --phase 2 --seq-len 16 --hidden-dim 256
 
-# 完整测试套件（574 收集项，仅需 CPU）
+# 完整测试套件（582 收集项，仅需 CPU）
 python -m pytest tests/ -v
 ```
 
@@ -246,7 +246,7 @@ astra/
 mock_pipeline.py          # Phase 1 和 2 本地模拟框架
 scripts/                  # run_node.py、run_cluster.py、check_env.py、benchmark.py、load_test.py、smoke_kt_adapter.py、verify_real_weights_small.py
 installer/                # 一键安装器（install.bat/.ps1/.sh、start.bat）
-tests/                    # 574 收集项（CPU/NumPy CI）
+tests/                    # 582 收集项（CPU/NumPy CI）
 docs/                     # ARCHITECTURE、ROADMAP、TESTING、INSTALL、SECURITY 等
 ```
 
@@ -259,7 +259,7 @@ docs/                     # ARCHITECTURE、ROADMAP、TESTING、INSTALL、SECURIT
 | [docs/INSTALL.md](docs/INSTALL.md) | 各平台安装指南 |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 系统设计、数据流、有线格式规范 |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | 分阶段计划（Phase 1–7 ✓，Phase 8 计划中 — 高级前端界面） |
-| [docs/TESTING.md](docs/TESTING.md) | 测试策略：574 项测试 + 硬件测试清单 |
+| [docs/TESTING.md](docs/TESTING.md) | 测试策略：582 项测试 + 硬件测试清单 |
 | [docs/SECURITY.md](docs/SECURITY.md) | mTLS、差分隐私、TEE 远程证明 |
 | [docs/TEE.md](docs/TEE.md) | TEE 部署：Intel SGX（Gramine）和 AMD SEV-SNP |
 | [docs/TLS.md](docs/TLS.md) | mTLS 搭建和配置指南 |

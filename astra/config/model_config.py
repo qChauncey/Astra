@@ -202,7 +202,7 @@ DEEPSEEK_V4_FLASH = ModelConfig(
     kt_threadpool_count=2,
     # ---- File layout ----
     num_safetensors_shards=46,
-    total_size_gb=284.0,               # 284B total params
+    total_size_gb=149.0,               # MXFP4 disk: 149 GiB (284B params → MXFP4)
     auto_map={
         "AutoConfig": "configuration_deepseek.DeepseekV4Config",
         "AutoModelForCausalLM": "modeling_deepseek.DeepseekV4ForCausalLM",
@@ -324,7 +324,7 @@ MODEL_CONFIGS: Dict[str, ModelConfig] = {
 }
 """Canonical model configuration registry.  Keys are normalised model IDs."""
 
-DEFAULT_MODEL: str = "minimax-m2.5"
+DEFAULT_MODEL: str = "deepseek-v4-flash"
 """Model to use when no model is explicitly specified."""
 
 

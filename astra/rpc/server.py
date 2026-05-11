@@ -230,6 +230,7 @@ class InferenceServer:
         attention_backend: str = "flashinfer",
         disable_shared_experts_fusion: bool = False,
         model_config: Optional[ModelConfig] = None,
+        model_dir: Optional[str] = None,
     ) -> None:
         self.node_id = node_id
         self.port = port
@@ -261,9 +262,25 @@ class InferenceServer:
             model_config=model_config,
         )
 
-        # Pre-pin shared experts 0 and 1
-        for sid in range(2):
-            self._engine.load_shared_experts([ExpertWeights.mock(sid, hidden_dim=dmap.hidden_dim)])
+    # ── Load real weights or fall back to mock ──────────────────────
+        if model_dir:
+            from astra.inference.weight_loader import WeightLoader
+            loader = WeightLoader(
+                model_dir,
+                layer_start=layer_start,
+                layer_end=layer_end,
+            )
+            loader.load_into(self._engine)
+            log.info(
+                "Loaded real weights from %s (layers %d–%d)",
+                model_dir, layer_start, layer_end,
+            )
+        else:
+            # Pre-pin shared experts 0 and 1 with mock weights
+            for sid in range(2):
+                self._engine.load_shared_experts(
+                    [ExpertWeights.mock(sid, hidden_dim=dmap.hidden_dim)]
+                )
 
         self._servicer = _InferenceServicer(
             node_id=node_id,

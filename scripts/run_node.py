@@ -139,7 +139,14 @@ def main() -> None:
     parser.add_argument(
         "--kt-weight-path",
         default=None,
-        help="Path to model weight files for KT-Kernel CPU inference",
+        help="Path to model weight files for KT-Kernel CPU inference "
+             "(default: $ASTRA_MODEL_DIR or /opt/astra/models/deepseek-v4-flash)",
+    )
+    parser.add_argument(
+        "--model-dir",
+        default=None,
+        help="Path to model directory containing safetensors / config.json "
+             "(auto-detected from $ASTRA_MODEL_DIR if not set)",
     )
     parser.add_argument(
         "--kt-num-gpu-experts",
@@ -202,6 +209,23 @@ def main() -> None:
     parser.add_argument("--verbose", action="store_true")
     args = parser.parse_args()
 
+    # ── Resolve model directory from env or defaults ─────────────────
+    _default_model_dir = os.environ.get("ASTRA_MODEL_DIR", "")
+    if not _default_model_dir:
+        # WSL / Linux fallback paths
+        for _candidate in (
+            "/home/chauncey/models/DeepSeek-V4-Flash",
+            "/opt/astra/models/deepseek-v4-flash",
+            os.path.expanduser("~/models/DeepSeek-V4-Flash"),
+        ):
+            if os.path.isdir(_candidate):
+                _default_model_dir = _candidate
+                break
+    if args.kt_weight_path is None:
+        args.kt_weight_path = args.model_dir or _default_model_dir or None
+    if args.kt_weight_path:
+        log.info("Model directory: %s", args.kt_weight_path)
+
     logging.basicConfig(
         level=logging.DEBUG if args.verbose else logging.INFO,
         format="%(asctime)s  %(levelname)-7s  [%(name)s]  %(message)s",
@@ -254,17 +278,25 @@ def main() -> None:
         "max_workers": args.workers,
     }
     # Forward KT-Kernel parameters to the inference server
-    if args.gpu and mc:
-        server_kwargs["kt_method"] = args.kt_method or mc.kt_method
-        server_kwargs["kt_weight_path"] = args.kt_weight_path
-        server_kwargs["kt_num_gpu_experts"] = args.kt_num_gpu_experts or mc.kt_num_gpu_experts
-        server_kwargs["kt_cpuinfer"] = args.kt_cpuinfer or mc.kt_cpuinfer
-        server_kwargs["kt_threadpool_count"] = args.kt_threadpool_count or mc.kt_threadpool_count
-        server_kwargs["kt_gpu_prefill_token_threshold"] = args.kt_gpu_prefill_token_threshold
-        server_kwargs["kt_enable_dynamic_expert_update"] = args.kt_enable_dynamic_expert_update
-        server_kwargs["attention_backend"] = args.attention_backend
-        server_kwargs["disable_shared_experts_fusion"] = args.disable_shared_experts_fusion
+    kt_method = args.kt_method or (mc.kt_method if mc else "")
+    kt_num_gpu = args.kt_num_gpu_experts or (mc.kt_num_gpu_experts if mc else 144)
+    kt_cpu = args.kt_cpuinfer or (mc.kt_cpuinfer if mc else 8)
+    kt_threads = args.kt_threadpool_count or (mc.kt_threadpool_count if mc else 2)
+    server_kwargs["kt_method"] = kt_method
+    server_kwargs["kt_weight_path"] = args.kt_weight_path
+    server_kwargs["kt_num_gpu_experts"] = kt_num_gpu
+    server_kwargs["kt_cpuinfer"] = kt_cpu
+    server_kwargs["kt_threadpool_count"] = kt_threads
+    server_kwargs["kt_gpu_prefill_token_threshold"] = args.kt_gpu_prefill_token_threshold
+    server_kwargs["kt_enable_dynamic_expert_update"] = args.kt_enable_dynamic_expert_update
+    server_kwargs["attention_backend"] = args.attention_backend
+    server_kwargs["disable_shared_experts_fusion"] = args.disable_shared_experts_fusion
+    if mc:
         server_kwargs["model_config"] = mc
+    # ── Model directory for real weight loading ───────────────────────
+    _resolved_model_dir = args.model_dir or args.kt_weight_path
+    if _resolved_model_dir:
+        server_kwargs["model_dir"] = _resolved_model_dir
     server = InferenceServer(**server_kwargs)
     server.start()
 

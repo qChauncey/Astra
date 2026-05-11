@@ -42,18 +42,12 @@ Client                          Server
 - 证书包含节点 ID、层范围、区域等信息，供路由层验证
 - 证书有效期 90 天，支持自动轮换（ACME 协议）
 
-**当前代码状态：**
+**当前代码状态（Phase 5 已完成）：**
 ```python
-# astra/rpc/server.py — 当前（不安全，仅用于开发）
-self._grpc_server.add_insecure_port(f"[::]:{port}")
-
-# 目标（Phase 3 安全加固）
-credentials = grpc.ssl_server_credentials(
-    [(private_key, certificate_chain)],
-    root_certificates=ca_cert,
-    require_client_auth=True,   # mTLS
-)
-self._grpc_server.add_secure_port(f"[::]:{port}", credentials)
+# astra/rpc/tls.py — mTLS 证书生成与 TOFU trust store 已实现
+from astra.rpc.tls import TofuTrustStore, generate_node_certificate
+# Server 端通过 grpc.ssl_server_credentials + require_client_auth=True 启动
+# Client 端通过 grpc.ssl_channel_credentials + secure_channel 连接
 ```
 
 ### 2.2 密码套件要求
@@ -130,7 +124,7 @@ if received_crc != response.output_states.crc32:
 
 CRC32 可检测**意外损坏**，但**无法防御主动篡改**（攻击者可同时篡改数据和 CRC）。
 
-### 4.2 加密哈希链（待实现）
+### 4.2 加密哈希链（已实现）
 
 ```
 每个 TensorPacket 携带：
@@ -156,7 +150,7 @@ manifest 由项目官方签名（Ed25519），节点启动时验证后才加载
 
 ## 5. 节点身份与准入控制
 
-### 5.1 节点注册流程（Phase 3 目标）
+### 5.1 节点注册流程（已实现）
 
 ```
 1. 节点生成 Ed25519 密钥对
@@ -180,10 +174,10 @@ manifest 由项目官方签名（Ed25519），节点启动时验证后才加载
 |-----|---------|------|
 | Phase 1 & 2 | CRC32 传输完整性 | ✅ 已完成 |
 | Phase 1 & 2 | 节点只接收隐藏状态，不接收原始 tokens | ✅ 协议设计保证 |
-| Phase 3 | gRPC mTLS 双向认证 | 📋 待实现 |
-| Phase 3 | HMAC-SHA256 签名链（防主动篡改） | 📋 待实现 |
-| Phase 3 | 权重分片 SHA-256 manifest + Ed25519 签名 | 📋 待实现 |
-| Phase 3 | 节点证书体系 + Sybil 防护 | 📋 待实现 |
+| Phase 3 | gRPC mTLS 双向认证 | ✅ 已完成（Phase 5 — `astra/rpc/tls.py`） |
+| Phase 3 | HMAC-SHA256 签名链（防主动篡改） | ✅ 已完成（`astra/rpc/client.py`） |
+| Phase 3 | 权重分片 SHA-256 manifest + Ed25519 签名 | ✅ 已完成（`astra/inference/weight_manifest.py` + `astra/network/identity.py`） |
+| Phase 3 | 节点证书体系 + Sybil 防护 | ✅ 已完成（TOFU trust store + Ed25519 身份） |
 | Phase 4 | 差分隐私激活值加噪（Gaussian/Laplace + MomentsAccountant） | ✅ 已完成 |
 | Phase 4 | TEE（Intel SGX via Gramine / AMD SEV-SNP）支持 | ✅ 已完成 |
 | 长期 | 同态加密 / 安全多方计算 | 🔬 研究方向 |
