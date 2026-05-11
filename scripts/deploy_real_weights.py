@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Deploy real MiniMax-M2.5 weights from local disk.
+"""Deploy real DeepSeek-V4-Flash weights from local disk.
 
-Scans `/home/chauncey/minimax-m2.5` for safetensors files, computes
-a round-robin shard assignment across N nodes, and prints the deployment plan.
-No weights are copied or loaded — this is a metadata-only plan.
+Scans `/home/chauncey/models/DeepSeek-V4-Flash` for safetensors files,
+computes a round-robin shard assignment across N nodes, and prints the
+deployment plan. No weights are copied or loaded — this is a metadata-only
+plan.
 """
 import pathlib
 import sys
@@ -11,8 +12,8 @@ import time
 from typing import List
 
 
-MODEL_DIR = pathlib.Path("/home/chauncey/minimax-m2.5")
-MODEL_ID = "minimax-m2.5"
+MODEL_DIR = pathlib.Path("/home/chauncey/models/DeepSeek-V4-Flash")
+MODEL_ID = "deepseek-v4-flash"
 NODE_IDS = ["node-0", "node-1", "node-2"]
 
 

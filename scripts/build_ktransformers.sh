@@ -20,7 +20,7 @@ log_error() { echo -e "${RED}[ERROR]${NC} $*"; }
 log_step()  { echo -e "${CYAN}[STEP]${NC}  $*"; }
 
 # ── CLI args ────────────────────────────────────────────────────
-CLONE_DIR="${KT_CLONE_DIR:-/tmp/ktransformers}"
+CLONE_DIR="${KT_CLONE_DIR:-$HOME/ktransformers}"
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --clone-dir) CLONE_DIR="$2"; shift 2 ;;
@@ -43,7 +43,25 @@ done
 # ── Prerequisite checks ─────────────────────────────────────────
 log_step "Checking prerequisites ..."
 
-# 1. nvcc (CUDA compiler)
+# 1. nvcc (CUDA compiler) — auto-detect from common install locations
+if ! command -v nvcc &>/dev/null; then
+    # Search common CUDA install directories
+    NVCC_CANDIDATES=(
+        /usr/local/cuda/bin
+        /usr/local/cuda-12.6/bin /usr/local/cuda-12.5/bin /usr/local/cuda-12.4/bin
+        /usr/local/cuda-12.3/bin /usr/local/cuda-12.2/bin /usr/local/cuda-12.1/bin
+        /usr/local/cuda-12.0/bin /usr/local/cuda-11.8/bin
+        /usr/lib/cuda/bin /opt/cuda/bin
+    )
+    for _dir in "${NVCC_CANDIDATES[@]}"; do
+        if [[ -x "$_dir/nvcc" ]]; then
+            log_info "Found nvcc at $_dir/nvcc (not on default PATH)"
+            export PATH="$_dir:$PATH"
+            break
+        fi
+    done
+fi
+
 if ! command -v nvcc &>/dev/null; then
     log_error "nvcc not found — CUDA Toolkit must be installed."
     echo ""
@@ -52,8 +70,8 @@ if ! command -v nvcc &>/dev/null; then
     echo "      sudo apt-get install -y cuda-toolkit-12-6"
     echo "    Other distros: https://developer.nvidia.com/cuda-downloads"
     echo ""
-    echo "  Or, if PyTorch ships its own CUDA compiler, set:"
-    echo "    export PATH=\$PATH:\$(python -c 'import torch; from pathlib import Path; print(Path(torch.__file__).parent.parent / \"nvidia\" / \"cuda_runtime\" / \"bin\")')"
+    echo "  Or, if you installed CUDA to a custom path, set:"
+    echo "    export PATH=\$PATH:/path/to/cuda/bin"
     echo ""
     exit 1
 fi
@@ -214,14 +232,14 @@ cd "$KT_KERNEL_DIR"
 export CPUINFER_USE_CUDA=1
 export CPUINFER_BUILD_TYPE="${CPUINFER_BUILD_TYPE:-Release}"
 export CPUINFER_PARALLEL="${CPUINFER_PARALLEL:-}"
-export CMAKE_CUDA_ARCHITECTURES="$ARCH_LIST"
+export CPUINFER_CUDA_ARCHS="$ARCH_LIST"
 
 # The kt-kernel setup.py reads CPUINFER_USE_CUDA and forwards it to CMake
 # but nvcc needs to be on PATH
 log_info "Build env:"
 log_info "  CPUINFER_USE_CUDA=$CPUINFER_USE_CUDA"
 log_info "  CPUINFER_BUILD_TYPE=$CPUINFER_BUILD_TYPE"
-log_info "  CMAKE_CUDA_ARCHITECTURES=$CMAKE_CUDA_ARCHITECTURES"
+log_info "  CPUINFER_CUDA_ARCHS=$CPUINFER_CUDA_ARCHS"
 log_info "  CPUINFER_PARALLEL=${CPUINFER_PARALLEL:-auto}"
 echo ""
 
