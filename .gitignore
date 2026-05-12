@@ -21,6 +21,7 @@ env/
 # Secrets / credentials
 *.pem
 *.key
+.env
 *.env
 
 # Model weights (large binary files)
